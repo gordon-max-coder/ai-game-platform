@@ -429,13 +429,36 @@ function showWelcomeMessage() {
 function showGamePreview(gameCode) {
     if (!elements.gameFrame || !elements.previewContent) return;
     
-    elements.gameFrame.style.display = 'block';
+    // 创建 9:16 比例的容器结构
+    let gameContainer = elements.previewContent.querySelector('.game-container');
+    
+    if (!gameContainer) {
+        // 创建容器
+        gameContainer = document.createElement('div');
+        gameContainer.className = 'game-container';
+        
+        const canvasWrapper = document.createElement('div');
+        canvasWrapper.className = 'game-canvas-wrapper';
+        
+        // 移动 iframe 到新容器中
+        elements.gameFrame.style.display = 'block';
+        canvasWrapper.appendChild(elements.gameFrame);
+        gameContainer.appendChild(canvasWrapper);
+        
+        // 隐藏 placeholder
+        const placeholder = elements.previewContent.querySelector('.preview-placeholder');
+        if (placeholder) placeholder.style.display = 'none';
+        
+        elements.previewContent.appendChild(gameContainer);
+    }
+    
+    // 设置游戏代码
     elements.gameFrame.srcdoc = gameCode;
     
-    const placeholder = elements.previewContent.querySelector('.preview-placeholder');
-    if (placeholder) placeholder.style.display = 'none';
-    
+    // 显示操作按钮
     if (elements.previewActions) elements.previewActions.style.display = 'flex';
+    
+    console.log('🖼️ 游戏预览已显示 (9:16 比例)');
 }
 
 function showGameTitle(title) {
