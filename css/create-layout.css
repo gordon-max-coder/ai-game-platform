@@ -6,19 +6,29 @@
     overflow: hidden;
 }
 
-/* 创建模式：只显示左侧对话区，全屏 */
+/* 创建模式：只显示左侧对话区，居中，两侧留空 */
 .create-workspace.create-mode {
     display: block;
+    background: #0f0f1a;
 }
 
 .create-workspace.create-mode .conversation-section {
     width: 100%;
     max-width: 100%;
+    border-right: none;
 }
 
 .create-workspace.create-mode .conversation-history {
     max-width: 900px;
     margin: 0 auto;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+}
+
+.create-workspace.create-mode .conversation-input {
+    max-width: 900px;
+    margin: 0 auto;
+    border-top: 1px solid #2d2d44;
 }
 
 /* 编辑模式：三栏布局 */

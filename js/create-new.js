@@ -149,6 +149,21 @@ function bindEvents() {
     
     // 监听页面刷新/关闭，保存状态
     window.addEventListener('beforeunload', savePageState);
+    
+    // 监听浏览器的后退/前进按钮
+    window.addEventListener('popstate', (e) => {
+        if (e.state && e.state.gameId) {
+            // 有游戏 ID，切换到编辑模式
+            loadGameFromURL();
+            setLayoutMode('edit');
+        } else {
+            // 无游戏 ID，切换到创建模式
+            currentGameId = null;
+            currentGameCode = null;
+            setLayoutMode('create');
+            showWelcomeMessage();
+        }
+    });
 }
 
 // ==================== 游戏加载 ====================
@@ -602,6 +617,29 @@ function savePageState() {
         console.log('💾 页面状态已保存');
     }
 }
+
+// 清除游戏会话（点击"创建"按钮时调用）
+window.clearGameSession = function() {
+    // 清除 sessionStorage
+    sessionStorage.removeItem('currentGameId');
+    sessionStorage.removeItem('currentGameCode');
+    sessionStorage.removeItem('currentVersion');
+    
+    // 重置全局变量
+    currentGameId = null;
+    currentGameCode = null;
+    currentVersion = 1;
+    
+    // 清除 URL 参数
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete('edit');
+    window.history.replaceState({}, '', newUrl.toString());
+    
+    console.log('🧹 游戏会话已清除，切换到创建模式');
+    
+    // 让页面正常跳转（不阻止默认行为）
+    return true;
+};
 
 // ==================== 启动 ====================
 
