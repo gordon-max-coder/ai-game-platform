@@ -1,6 +1,6 @@
 /**
- * GameAI - 游戏参数分析模块
- * 分析游戏代码，提取关键数值，支持滑动调整
+ * GameAI - 游戏参数分析模块（精简版）
+ * 智能提取最关键的游戏参数（最多 5 个）
  */
 
 const GameAnalyzer = (function() {
@@ -8,63 +8,59 @@ const GameAnalyzer = (function() {
     let currentGameId = null;
     let properties = {};
 
-    // 常见的游戏参数模式
+    // 关键参数优先级（按重要性排序）
+    const priorityCategories = [
+        'speed',        // 速度 - 最核心的游戏参数
+        'lives',        // 生命/血量 - 影响游戏难度
+        'score',        // 分数 - 游戏目标
+        'size',         // 大小 - 影响视觉和碰撞
+        'spawnRate'     // 生成率 - 影响游戏节奏
+    ];
+
+    // 精简的参数模式（只匹配最明确的）
     const propertyPatterns = {
-        // 速度类
+        // 速度类 - 只匹配明确的玩家/球/敌人速度
         speed: [
-            /(?:player|ship|ball|enemy)\.speed\s*=\s*(\d+(?:\.\d+)?)/gi,
-            /speed:\s*(\d+(?:\.\d+)?)/gi,
-            /const\s+(?:player|ship|ball|enemy)Speed\s*=\s*(\d+(?:\.\d+)?)/gi
+            /(?:player|ship|ball|enemy|paddle)\.speed\s*=\s*(\d+(?:\.\d+)?)/gi,
+            /const\s+(?:player|ship|ball|enemy|paddle)Speed\s*=\s*(\d+(?:\.\d+)?)/gi
         ],
-        // 大小类
-        size: [
-            /(?:width|height|size|radius)\s*[:=]\s*(\d+(?:\.\d+)?)/gi,
-            /(?:player|ship|ball|enemy)\.(?:width|height|size)\s*=\s*(\d+(?:\.\d+)?)/gi
-        ],
-        // 分数类
-        score: [
-            /score\s*[:=]\s*(\d+)/gi,
-            /points\s*[:=]\s*(\d+)/gi,
-            /(?:kill|hit|collect)Score\s*[:=]\s*(\d+)/gi
-        ],
-        // 生命类
+        // 生命类 - 只匹配 lives/hp/health
         lives: [
-            /lives?\s*[:=]\s*(\d+)/gi,
-            /hp\s*[:=]\s*(\d+(?:\.\d+)?)/gi,
-            /health\s*[:=]\s*(\d+(?:\.\d+)?)/gi
+            /(?:lives|playerLives)\s*=\s*(\d+)/gi,
+            /(?:player)?(?:hp|health)\s*=\s*(\d+(?:\.\d+)?)/gi,
+            /const\s+(?:max)?(?:Lives|HP|Health)\s*=\s*(\d+(?:\.\d+)?)/gi
         ],
-        // 重力/物理
-        gravity: [
-            /gravity\s*[:=]\s*(\d+(?:\.\d+)?)/gi,
-            /friction\s*[:=]\s*(\d+(?:\.\d+)?)/gi,
-            /bounce\s*[:=]\s*(\d+(?:\.\d+)?)/gi
+        // 分数类 - 只匹配明确的分数
+        score: [
+            /score\s*=\s*(\d+)/gi,
+            /const\s+(?:winScore|maxScore|targetScore)\s*=\s*(\d+)/gi
         ],
-        // 生成率
+        // 大小类 - 只匹配玩家/球/砖块的大小
+        size: [
+            /(?:player|ball|paddle|brick)\.(?:width|height|radius|size)\s*=\s*(\d+(?:\.\d+)?)/gi,
+            /const\s+(?:player|ball|paddle|brick)(?:Width|Height|Size|Radius)\s*=\s*(\d+(?:\.\d+)?)/gi
+        ],
+        // 生成率 - 只匹配明确的生成间隔
         spawnRate: [
-            /spawnRate\s*[:=]\s*(\d+)/gi,
-            /spawnInterval\s*[:=]\s*(\d+)/gi,
-            /enemySpawn\s*[:=]\s*(\d+)/gi
-        ],
-        // 其他数值
-        other: [
-            /(?:max|min)[A-Z][a-zA-Z]*\s*[:=]\s*(\d+(?:\.\d+)?)/gi,
-            /const\s+[A-Z][a-zA-Z]*\s*=\s*(\d+(?:\.\d+)?)/gi
+            /(?:spawnRate|spawnInterval|enemySpawnRate)\s*=\s*(\d+)/gi,
+            /const\s+(?:spawn|enemy)Interval\s*=\s*(\d+)/gi
         ]
     };
 
-    // 分析游戏代码
+    // 分析游戏代码（智能精简）
     function analyze(code, gameId) {
         currentGameCode = code;
         currentGameId = gameId;
         properties = {};
 
-        // 提取各类参数
+        const allFound = {};
+
+        // 1. 提取所有匹配的参数
         for (const [category, patterns] of Object.entries(propertyPatterns)) {
             const found = [];
             
             patterns.forEach(pattern => {
                 let match;
-                // 重置正则 lastIndex
                 pattern.lastIndex = 0;
                 
                 while ((match = pattern.exec(code)) !== null) {
@@ -73,24 +69,90 @@ const GameAnalyzer = (function() {
                         found.push({
                             value: value,
                             index: match.index,
-                            fullMatch: match[0]
+                            fullMatch: match[0],
+                            context: getCodeContext(code, match.index)
                         });
                     }
                 }
             });
 
             if (found.length > 0) {
-                // 去重并排序
+                // 去重，保留最有代表性的值
                 const uniqueValues = [...new Set(found.map(f => f.value))].sort((a, b) => a - b);
-                properties[category] = {
+                allFound[category] = {
                     values: uniqueValues,
-                    details: found
+                    details: found,
+                    priority: priorityCategories.indexOf(category)
                 };
             }
         }
 
-        console.log('🔍 游戏分析完成:', Object.keys(properties).length, '类参数');
+        // 2. 智能筛选：最多保留 5 个关键参数
+        properties = smartSelect(allFound, 5);
+
+        console.log('🔍 游戏分析完成:', Object.keys(properties).length, '个关键参数');
         return properties;
+    }
+
+    // 智能筛选关键参数
+    function smartSelect(allFound, maxCount) {
+        const result = {};
+        
+        // 按优先级排序
+        const sortedCategories = Object.entries(allFound)
+            .sort((a, b) => a[1].priority - b[1].priority);
+
+        let count = 0;
+        
+        for (const [category, data] of sortedCategories) {
+            if (count >= maxCount) break;
+
+            // 每个类别最多保留 2 个最有代表性的值
+            const selectedValues = selectRepresentativeValues(data.values, 2);
+            
+            if (selectedValues.length > 0) {
+                // 找到对应的 details
+                const selectedDetails = data.details.filter(d => 
+                    selectedValues.includes(d.value)
+                );
+
+                result[category] = {
+                    values: selectedValues,
+                    details: selectedDetails,
+                    priority: data.priority
+                };
+                count++;
+            }
+        }
+
+        return result;
+    }
+
+    // 选择最有代表性的值
+    function selectRepresentativeValues(values, maxCount) {
+        if (values.length <= maxCount) {
+            return values;
+        }
+
+        // 如果值太多，选择最小、最大和中间值
+        const selected = [];
+        const step = Math.floor(values.length / maxCount);
+        
+        for (let i = 0; i < maxCount; i++) {
+            const index = Math.min(i * step, values.length - 1);
+            if (!selected.includes(values[index])) {
+                selected.push(values[index]);
+            }
+        }
+
+        return selected.sort((a, b) => a - b);
+    }
+
+    // 获取代码上下文（用于调试）
+    function getCodeContext(code, index) {
+        const start = Math.max(0, index - 30);
+        const end = Math.min(code.length, index + 50);
+        return code.substring(start, end).replace(/\n/g, ' ');
     }
 
     // 渲染属性面板
@@ -124,7 +186,7 @@ const GameAnalyzer = (function() {
                 html += `
                     <div class="property-item">
                         <div class="property-label">
-                            <span class="property-name">${categoryName} ${index + 1}</span>
+                            <span class="property-name">${categoryName}</span>
                             <span class="property-value" id="value-${category}-${index}">${value}</span>
                         </div>
                         <input type="range" 
@@ -156,10 +218,8 @@ const GameAnalyzer = (function() {
             speed: '⚡ 速度',
             size: '📏 大小',
             score: '🏆 分数',
-            lives: '❤️ 生命/血量',
-            gravity: '🌍 物理',
-            spawnRate: '🔄 生成率',
-            other: '🔧 其他'
+            lives: '❤️ 生命',
+            spawnRate: '🔄 生成速度'
         };
         return names[category] || category;
     }
@@ -181,7 +241,6 @@ const GameAnalyzer = (function() {
         const category = slider.dataset.category;
         const index = slider.dataset.index;
 
-        // 更新显示值
         const valueDisplay = document.getElementById(`value-${category}-${index}`);
         if (valueDisplay) {
             valueDisplay.textContent = value;
@@ -199,7 +258,6 @@ const GameAnalyzer = (function() {
 
         console.log(`🔧 修改参数：${category} ${originalValue} → ${newValue}`);
 
-        // 更新代码
         if (currentGameCode && properties[category]) {
             const details = properties[category].details;
             let newCode = currentGameCode;
@@ -207,7 +265,6 @@ const GameAnalyzer = (function() {
 
             details.forEach(detail => {
                 if (detail.value === originalValue) {
-                    // 替换代码中的值
                     const oldValue = detail.fullMatch;
                     const newValueStr = oldValue.replace(String(originalValue), String(newValue));
                     newCode = replaceAt(newCode, detail.index, oldValue.length, newValueStr);
@@ -218,11 +275,7 @@ const GameAnalyzer = (function() {
             if (changed) {
                 currentGameCode = newCode;
                 console.log('✅ 代码已更新');
-
-                // 更新 iframe 预览
                 updatePreview(newCode);
-
-                // 更新 dataset.original
                 slider.dataset.original = newValue;
             }
         }
@@ -264,4 +317,4 @@ const GameAnalyzer = (function() {
 
 // 导出到全局
 window.GameAnalyzer = GameAnalyzer;
-console.log('✅ GameAnalyzer 模块已加载');
+console.log('✅ GameAnalyzer 模块已加载（精简版 - 最多 5 个关键参数）');
