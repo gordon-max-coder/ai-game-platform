@@ -6,6 +6,35 @@
     overflow: hidden;
 }
 
+/* 创建模式：只显示左侧对话区，全屏 */
+.create-workspace.create-mode {
+    display: block;
+}
+
+.create-workspace.create-mode .conversation-section {
+    width: 100%;
+    max-width: 100%;
+}
+
+.create-workspace.create-mode .conversation-history {
+    max-width: 900px;
+    margin: 0 auto;
+}
+
+/* 编辑模式：三栏布局 */
+.create-workspace.edit-mode {
+    display: flex;
+}
+
+.create-workspace.edit-mode .conversation-section {
+    flex: 1;
+    max-width: none;
+}
+
+.create-workspace.edit-mode .conversation-history {
+    max-width: none;
+}
+
 /* ==================== 左侧对话区（1/3） ==================== */
 .conversation-section {
     flex: 1;

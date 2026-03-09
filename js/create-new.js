@@ -28,12 +28,49 @@ function init() {
         loaded = recoverFromSessionStorage();
     }
     
-    // 3. 如果都没有，显示欢迎界面
-    if (!loaded) {
+    // 3. 根据是否有游戏切换布局模式
+    if (loaded) {
+        // 编辑模式：显示三栏布局
+        setLayoutMode('edit');
+    } else {
+        // 创建模式：只显示左侧对话区，全屏
+        setLayoutMode('create');
         showWelcomeMessage();
     }
     
-    console.log('✅ 初始化完成，currentGameId:', currentGameId);
+    console.log('✅ 初始化完成，currentGameId:', currentGameId, '布局模式:', loaded ? '编辑' : '创建');
+}
+
+// 设置布局模式
+function setLayoutMode(mode) {
+    const workspace = document.querySelector('.create-workspace');
+    if (!workspace) return;
+    
+    if (mode === 'edit') {
+        // 编辑模式：显示三栏布局
+        workspace.classList.remove('create-mode');
+        workspace.classList.add('edit-mode');
+        
+        // 显示预览区和参数区
+        const previewSection = document.querySelector('.preview-section');
+        const propertiesSection = document.querySelector('.properties-section');
+        if (previewSection) previewSection.style.display = 'flex';
+        if (propertiesSection) propertiesSection.style.display = 'flex';
+        
+        console.log('📐 布局模式：编辑模式 (三栏)');
+    } else {
+        // 创建模式：只显示左侧，全屏
+        workspace.classList.remove('edit-mode');
+        workspace.classList.add('create-mode');
+        
+        // 隐藏预览区和参数区
+        const previewSection = document.querySelector('.preview-section');
+        const propertiesSection = document.querySelector('.properties-section');
+        if (previewSection) previewSection.style.display = 'none';
+        if (propertiesSection) propertiesSection.style.display = 'none';
+        
+        console.log('📐 布局模式：创建模式 (全屏对话)');
+    }
 }
 
 // 从 sessionStorage 恢复状态（页面刷新）
@@ -443,6 +480,9 @@ function showWelcomeMessage() {
 
 function showGamePreview(gameCode) {
     if (!elements.gameFrame || !elements.previewContent) return;
+    
+    // 切换到编辑模式（显示三栏）
+    setLayoutMode('edit');
     
     // 创建 9:16 比例的容器结构
     let gameContainer = elements.previewContent.querySelector('.game-container');
