@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录/注册 - GameAI</title>
+    <link rel="stylesheet" href="css/auth.css">
+</head>
+<body>
+    <div class="auth-container">
+        <!-- 左侧装饰 -->
+        <div class="auth-sidebar">
+            <div class="auth-brand">
+                <img src="images/logo.svg" alt="Logo" onerror="this.style.display='none'">
+                <h1>GameAI</h1>
+            </div>
+            <div class="auth-content">
+                <h2>用 AI 创造你的游戏梦想</h2>
+                <p>只需描述你的想法，AI 就会帮你生成完整的游戏</p>
+                <ul class="features-list">
+                    <li>✨ AI 自动生成游戏代码</li>
+                    <li>🎮 无需编程经验</li>
+                    <li>🚀 快速迭代和修改</li>
+                    <li>💾 云端保存游戏</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 右侧表单 -->
+        <div class="auth-forms">
+            <!-- 顶部导航 -->
+            <div class="auth-nav">
+                <a href="index.html" class="back-link">← 返回首页</a>
+            </div>
+
+            <!-- 登录表单 -->
+            <div class="auth-form" id="loginForm">
+                <h2>欢迎回来</h2>
+                <p class="form-subtitle">登录你的账户继续创作</p>
+
+                <form onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label for="loginEmail">邮箱</label>
+                        <input type="email" id="loginEmail" required placeholder="your@email.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="loginPassword">密码</label>
+                        <input type="password" id="loginPassword" required placeholder="至少 6 位密码">
+                    </div>
+
+                    <div class="form-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="rememberMe">
+                            <span>记住我</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn-primary">登录</button>
+                </form>
+
+                <div class="form-footer">
+                    <p>还没有账户？<a href="#" onclick="showRegister()">立即注册</a></p>
+                </div>
+
+                <div class="alert" id="loginAlert" style="display: none;"></div>
+            </div>
+
+            <!-- 注册表单 -->
+            <div class="auth-form" id="registerForm" style="display: none;">
+                <h2>创建账户</h2>
+                <p class="form-subtitle">开始你的游戏创作之旅</p>
+
+                <form onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label for="registerUsername">用户名</label>
+                        <input type="text" id="registerUsername" required placeholder="3-20 个字符" minlength="3" maxlength="20">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="registerEmail">邮箱</label>
+                        <input type="email" id="registerEmail" required placeholder="your@email.com">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="registerPassword">密码</label>
+                        <input type="password" id="registerPassword" required placeholder="至少 6 位密码" minlength="6">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="registerConfirm">确认密码</label>
+                        <input type="password" id="registerConfirm" required placeholder="再次输入密码">
+                    </div>
+
+                    <div class="form-options">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="agreeTerms" required>
+                            <span>我同意<a href="#">服务条款</a>和<a href="#">隐私政策</a></span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn-primary">注册</button>
+                </form>
+
+                <div class="form-footer">
+                    <p>已有账户？<a href="#" onclick="showLogin()">立即登录</a></p>
+                </div>
+
+                <div class="alert" id="registerAlert" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script src="js/auth-page.js"></script>
+</body>
+</html>

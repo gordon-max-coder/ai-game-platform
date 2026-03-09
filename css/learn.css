@@ -1,0 +1,231 @@
+/* GameAI - 学习中心页面样式 */
+
+@import url('navigation.css');
+
+/* 主内容区域右移 */
+.main-wrapper {
+    margin-left: 80px;
+    min-height: 100vh;
+    background: #0f0f1a;
+    transition: margin-left 0.3s ease;
+}
+
+.sidebar:hover ~ .main-wrapper,
+.sidebar.expanded ~ .main-wrapper {
+    margin-left: 260px;
+}
+
+.main-content {
+    padding: 2rem;
+    max-width: 1200px;
+}
+
+.page-header {
+    text-align: center;
+    margin-bottom: 3rem;
+}
+
+.page-header h1 {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.page-header p {
+    color: #a0a0b0;
+}
+
+/* 教程区域 */
+.tutorials-section,
+.tips-section,
+.examples-section {
+    padding: 3rem 0;
+}
+
+.tutorials-section h2,
+.tips-section h2,
+.examples-section h2 {
+    font-size: 2.5rem;
+    margin-bottom: 2rem;
+    text-align: center;
+}
+
+.tutorials-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+}
+
+.tutorial-card {
+    background: #1a1a2e;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.tutorial-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.tutorial-thumb {
+    height: 180px;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 5rem;
+}
+
+.tutorial-content {
+    padding: 1.5rem;
+}
+
+.tutorial-tag {
+    display: inline-block;
+    padding: 0.3rem 0.8rem;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 0.8rem;
+}
+
+.tutorial-content h3 {
+    font-size: 1.3rem;
+    margin-bottom: 0.8rem;
+}
+
+.tutorial-content p {
+    color: #a0a0b0;
+    margin-bottom: 1rem;
+    line-height: 1.6;
+}
+
+.tutorial-meta {
+    display: flex;
+    gap: 1rem;
+    color: #6b6b7b;
+    font-size: 0.85rem;
+}
+
+/* 提示区域 */
+.tips-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+}
+
+.tip-card {
+    background: #1a1a2e;
+    padding: 2rem;
+    border-radius: 12px;
+    text-align: center;
+    transition: transform 0.3s ease;
+}
+
+.tip-card:hover {
+    transform: translateY(-5px);
+}
+
+.tip-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+}
+
+.tip-card h4 {
+    font-size: 1.1rem;
+    margin-bottom: 0.8rem;
+}
+
+.tip-card p {
+    color: #a0a0b0;
+    line-height: 1.6;
+}
+
+/* 示例区域 */
+.examples-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.example-item {
+    background: #1a1a2e;
+    padding: 1.5rem;
+    border-radius: 12px;
+    border: 1px solid #2d2d44;
+}
+
+.example-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.example-type {
+    padding: 0.4rem 1rem;
+    background: #252542;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    color: #6366f1;
+    font-weight: 600;
+}
+
+.example-prompt {
+    color: #a0a0b0;
+    line-height: 1.8;
+    padding-left: 1rem;
+    border-left: 3px solid #6366f1;
+}
+
+/* 页脚 */
+.footer {
+    background: #1a1a2e;
+    padding: 4rem 2rem 2rem;
+    margin-top: 4rem;
+}
+
+.footer-content {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 3rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.footer-section h4 {
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+}
+
+.footer-section a {
+    display: block;
+    color: #a0a0b0;
+    margin-bottom: 0.5rem;
+    text-decoration: none;
+}
+
+.footer-section a:hover {
+    color: #6366f1;
+}
+
+.footer-bottom {
+    text-align: center;
+    padding-top: 2rem;
+    margin-top: 2rem;
+    border-top: 1px solid #2d2d44;
+    color: #6b6b7b;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .tutorials-grid,
+    .tips-grid {
+        grid-template-columns: 1fr;
+    }
+}

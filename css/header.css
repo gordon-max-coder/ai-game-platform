@@ -1,0 +1,168 @@
+/* GameAI - 顶部导航栏样式 */
+
+:root {
+    --header-height: 60px;
+    --header-bg: rgba(15, 15, 26, 0.95);
+    --header-border: #2d2d44;
+}
+
+/* 顶部导航栏 */
+.top-navbar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--header-height);
+    background: var(--header-bg);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--header-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 2rem;
+    z-index: 1000;
+}
+
+/* Logo 区域 */
+.navbar-brand {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    text-decoration: none;
+    color: white;
+    font-size: 1.3rem;
+    font-weight: bold;
+    transition: opacity 0.2s ease;
+}
+
+.navbar-brand:hover {
+    opacity: 0.8;
+}
+
+.navbar-brand img {
+    width: 40px;
+    height: 40px;
+}
+
+/* 右侧用户区域 */
+.navbar-right {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-left: auto;
+}
+
+/* 导航链接 - 隐藏 */
+.navbar-links {
+    display: none;
+}
+
+/* 用户信息 */
+.navbar-user {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.5rem 1rem;
+    background: #252542;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.navbar-user:hover {
+    background: #2d2d44;
+}
+
+.user-avatar-small {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    font-size: 0.9rem;
+    color: white;
+}
+
+.user-name-small {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: white;
+}
+
+/* 登录按钮 */
+.navbar-auth {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.btn-navbar-login {
+    padding: 0.6rem 1.5rem;
+    background: transparent;
+    color: white;
+    border: 1px solid #2d2d44;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-navbar-login:hover {
+    border-color: #6366f1;
+    background: #252542;
+}
+
+.btn-navbar-signup {
+    padding: 0.6rem 1.5rem;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: all 0.2s ease;
+}
+
+.btn-navbar-signup:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+/* 主内容区域调整 */
+.page-wrapper {
+    margin-top: var(--header-height);
+    min-height: calc(100vh - var(--header-height));
+}
+
+/* 侧边栏调整 */
+.sidebar {
+    top: var(--header-height) !important;
+    height: calc(100vh - var(--header-height)) !important;
+    padding-top: 1rem !important;
+}
+
+.sidebar-logo {
+    display: none !important;
+}
+
+/* 响应式 */
+@media (max-width: 768px) {
+    .top-navbar {
+        padding: 0 1rem;
+    }
+    
+    .navbar-links {
+        display: none;
+    }
+    
+    .navbar-brand span {
+        display: none;
+    }
+}

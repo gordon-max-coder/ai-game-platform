@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>创建游戏 - GameAI</title>
+    <link rel="stylesheet" href="css/header.css">
+    <link rel="stylesheet" href="css/navigation.css">
+    <link rel="stylesheet" href="css/create-layout.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <header class="top-navbar">
+        <a href="index.html" class="navbar-brand">
+            <img src="images/logo.svg" alt="Logo" onerror="this.style.display='none'">
+            <span>GameAI</span>
+        </a>
+
+        <div class="navbar-right">
+            <div id="navbarUserContainer">
+                <!-- 由 navbar.js 动态填充 -->
+            </div>
+        </div>
+    </header>
+
+    <!-- 页面包装器 -->
+    <div class="page-wrapper">
+        <!-- 左侧工具栏 -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="index.html">
+                    <span class="icon">🏠</span>
+                    <span>首页</span>
+                </a>
+                <a href="create.html" class="active">
+                    <span class="icon">✨</span>
+                    <span>创建</span>
+                </a>
+                <a href="games.html">
+                    <span class="icon">🎮</span>
+                    <span>游戏库</span>
+                </a>
+                <a href="my-games.html">
+                    <span class="icon">🎯</span>
+                    <span>我的游戏</span>
+                </a>
+                <a href="learn.html">
+                    <span class="icon">📚</span>
+                    <span>学习</span>
+                </a>
+            </nav>
+
+            <!-- 用户状态容器 -->
+            <div id="sidebarUserContainer">
+                <!-- 由 user-state.js 动态填充 -->
+            </div>
+
+            <div class="sidebar-social">
+                <a href="#" class="social-link">Discord</a>
+                <a href="#" class="social-link">Twitter</a>
+                <a href="#" class="social-link">YouTube</a>
+            </div>
+        </aside>
+
+        <!-- 主内容区 - 6:4 分栏 -->
+        <div class="main-wrapper">
+            <main class="create-workspace">
+                <!-- 左侧 60% - 对话区 -->
+                <div class="conversation-section">
+                    <!-- 对话记录区（4/5） -->
+                    <div class="conversation-history" id="conversationHistory">
+                        <div class="conversation-messages" id="conversationMessages">
+                            <div class="welcome-message">
+                                <h2>🎮 开始创建你的游戏</h2>
+                                <p>描述你想要的游戏，AI 会帮你实现</p>
+                                <div class="example-prompts">
+                                    <button class="prompt-chip" data-prompt="创建一个太空射击游戏，玩家控制飞船躲避陨石并消灭敌人">🚀 太空射击</button>
+                                    <button class="prompt-chip" data-prompt="创建一个贪食蛇游戏，蛇吃食物变长，撞到墙壁或自己就游戏结束">🐍 贪食蛇</button>
+                                    <button class="prompt-chip" data-prompt="创建一个平台跳跃游戏，玩家跳跃躲避障碍物收集金币">🏃 平台跳跃</button>
+                                    <button class="prompt-chip" data-prompt="创建一个打砖块游戏，用球拍反弹球击碎砖块">🧱 打砖块</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 输入区（1/5） -->
+                    <div class="conversation-input">
+                        <div class="input-wrapper">
+                            <textarea 
+                                id="promptInput" 
+                                class="prompt-input"
+                                placeholder="描述你想要创建的游戏..."
+                                rows="3"
+                            ></textarea>
+                            <button class="btn-send" id="sendBtn" disabled>
+                                <span>✨</span>
+                                <span>生成</span>
+                            </button>
+                        </div>
+                        <div class="input-tips">
+                            <span>💡 提示：描述越详细，生成的游戏越符合预期</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧 40% - 游戏展示区 -->
+                <div class="preview-section">
+                    <div class="preview-header">
+                        <h3>🎯 游戏预览</h3>
+                        <div class="preview-actions" id="previewActions" style="display: none;">
+                            <button class="btn-action" id="playBtn">▶️ 试玩</button>
+                            <button class="btn-action" id="modifyBtn">✏️ 修改</button>
+                        </div>
+                    </div>
+                    
+                    <div class="preview-content" id="previewContent">
+                        <div class="preview-placeholder">
+                            <div class="placeholder-icon">🎮</div>
+                            <p>游戏生成后会在这里显示</p>
+                        </div>
+                        <iframe class="game-frame" id="gameFrame" style="display: none;"></iframe>
+                    </div>
+
+                    <!-- 修改输入区（隐藏，点击修改后显示） -->
+                    <div class="modify-input-section" id="modifyInputSection" style="display: none;">
+                        <textarea 
+                            id="modifyInput" 
+                            class="modify-input"
+                            placeholder="描述你想要修改的内容..."
+                            rows="2"
+                        ></textarea>
+                        <div class="modify-actions">
+                            <button class="btn-cancel" id="cancelModifyBtn">取消</button>
+                            <button class="btn-send" id="modifySendBtn">🚀 生成修改</button>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- 核心模块 -->
+    <script src="js/game-storage.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/navbar.js"></script>
+    <script src="js/user-state.js"></script>
+    <script src="js/create-new.js"></script>
+</body>
+</html>

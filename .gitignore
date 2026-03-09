@@ -1,0 +1,14 @@
+# 自动生成的文件
+node_modules/
+*.log
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.bak
+*.swp
+
+# 日志文件
+server.log
+*.log

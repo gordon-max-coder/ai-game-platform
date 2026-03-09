@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🚀 开始使用 - GameAI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+            color: #ffffff;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .header h1 {
+            font-size: 3.5rem;
+            margin-bottom: 1rem;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header p {
+            font-size: 1.3rem;
+            color: #a0a0b0;
+        }
+
+        .quick-start {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-bottom: 4rem;
+        }
+
+        .start-card {
+            background: #1a1a2e;
+            border: 1px solid #2d2d44;
+            border-radius: 16px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            text-decoration: none;
+            color: inherit;
+            display: block;
+        }
+
+        .start-card:hover {
+            transform: translateY(-5px);
+            border-color: #6366f1;
+            box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
+        }
+
+        .start-card.featured {
+            border-color: #6366f1;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+        }
+
+        .card-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .card-title {
+            font-size: 1.5rem;
+            margin-bottom: 0.8rem;
+            color: #ffffff;
+        }
+
+        .card-desc {
+            color: #a0a0b0;
+            line-height: 1.6;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: white;
+        }
+
+        .card-badge.new {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+        }
+
+        .all-pages {
+            background: #1a1a2e;
+            border: 1px solid #2d2d44;
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 3rem;
+        }
+
+        .all-pages h2 {
+            margin-bottom: 1.5rem;
+            font-size: 1.8rem;
+        }
+
+        .pages-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .page-link {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            padding: 1rem;
+            background: #252542;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #ffffff;
+            transition: all 0.2s ease;
+        }
+
+        .page-link:hover {
+            background: #2d2d44;
+            transform: translateX(5px);
+        }
+
+        .page-icon {
+            font-size: 1.5rem;
+        }
+
+        .docs-section {
+            background: #1a1a2e;
+            border: 1px solid #2d2d44;
+            border-radius: 16px;
+            padding: 2rem;
+        }
+
+        .docs-section h2 {
+            margin-bottom: 1.5rem;
+            font-size: 1.8rem;
+        }
+
+        .docs-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+        }
+
+        .doc-item {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 1rem;
+            background: #252542;
+            border-radius: 8px;
+            text-decoration: none;
+            color: #ffffff;
+            transition: all 0.2s ease;
+        }
+
+        .doc-item:hover {
+            background: #2d2d44;
+        }
+
+        .doc-icon {
+            font-size: 1.3rem;
+        }
+
+        .footer {
+            text-align: center;
+            margin-top: 4rem;
+            padding-top: 2rem;
+            border-top: 1px solid #2d2d44;
+            color: #6b6b7b;
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2.5rem;
+            }
+
+            .quick-start {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎮 AI 游戏生成平台</h1>
+            <p>用 AI 创造你的游戏梦想 - 只需描述想法，AI 帮你生成完整游戏</p>
+        </div>
+
+        <!-- 快速开始 -->
+        <div class="quick-start">
+            <a href="create.html" class="start-card featured">
+                <div class="card-icon">✨</div>
+                <h3 class="card-title">创建游戏</h3>
+                <p class="card-desc">
+                    使用 AI 生成你的第一个游戏！只需描述你的想法，10-30 秒即可生成完整可玩的游戏。
+                </p>
+                <span class="card-badge">核心功能</span>
+            </a>
+
+            <a href="my-games.html" class="start-card">
+                <div class="card-icon">📂</div>
+                <h3 class="card-title">我的游戏</h3>
+                <p class="card-desc">
+                    查看和管理你创建的所有游戏。支持导出、导入、删除和统计游玩次数。
+                </p>
+                <span class="card-badge new">新功能</span>
+            </a>
+
+            <a href="api-test.html" class="start-card">
+                <div class="card-icon">🔧</div>
+                <h3 class="card-title">API 测试</h3>
+                <p class="card-desc">
+                    测试 API 连接状态，验证配置是否正确。包含连接测试和生成测试。
+                </p>
+                <span class="card-badge new">工具</span>
+            </a>
+        </div>
+
+        <!-- 所有页面 -->
+        <div class="all-pages">
+            <h2>📋 所有页面</h2>
+            <div class="pages-grid">
+                <a href="index.html" class="page-link">
+                    <span class="page-icon">🏠</span>
+                    <span>首页</span>
+                </a>
+                <a href="create.html" class="page-link">
+                    <span class="page-icon">✨</span>
+                    <span>创建游戏</span>
+                </a>
+                <a href="games.html" class="page-link">
+                    <span class="page-icon">🎮</span>
+                    <span>游戏库</span>
+                </a>
+                <a href="my-games.html" class="page-link">
+                    <span class="page-icon">📂</span>
+                    <span>我的游戏</span>
+                </a>
+                <a href="learn.html" class="page-link">
+                    <span class="page-icon">📚</span>
+                    <span>学习中心</span>
+                </a>
+                <a href="about.html" class="page-link">
+                    <span class="page-icon">ℹ️</span>
+                    <span>关于</span>
+                </a>
+                <a href="api-test.html" class="page-link">
+                    <span class="page-icon">🔧</span>
+                    <span>API 测试</span>
+                </a>
+            </div>
+        </div>
+
+        <!-- 文档 -->
+        <div class="docs-section">
+            <h2>📖 文档</h2>
+            <div class="docs-list">
+                <a href="使用指南.md" class="doc-item">
+                    <span class="doc-icon">📘</span>
+                    <div>
+                        <strong>使用指南</strong>
+                        <p style="color: #6b6b7b; font-size: 0.9rem;">详细的使用说明和提示词技巧</p>
+                    </div>
+                </a>
+                <a href="功能总结.md" class="doc-item">
+                    <span class="doc-icon">📊</span>
+                    <div>
+                        <strong>功能总结</strong>
+                        <p style="color: #6b6b7b; font-size: 0.9rem;">完整的功能列表和技术详情</p>
+                    </div>
+                </a>
+                <a href="项目总览.md" class="doc-item">
+                    <span class="doc-icon">📋</span>
+                    <div>
+                        <strong>项目总览</strong>
+                        <p style="color: #6b6b7b; font-size: 0.9rem;">项目结构和快速链接</p>
+                    </div>
+                </a>
+                <a href="README-DIRECT.md" class="doc-item">
+                    <span class="doc-icon">🚀</span>
+                    <div>
+                        <strong>快速开始</strong>
+                        <p style="color: #6b6b7b; font-size: 0.9rem;">直接 API 版本说明</p>
+                    </div>
+                </a>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>🎮 AI 游戏生成平台 - 让游戏创作变得简单</p>
+            <p style="margin-top: 0.5rem;">使用 jiekou.ai API · Claude-opus-4-6 模型</p>
+        </div>
+    </div>
+
+    <script>
+        // 检查是否有保存的游戏
+        const games = localStorage.getItem('gameai_games');
+        if (games && JSON.parse(games).length > 0) {
+            console.log('✅ 发现已保存的游戏');
+        }
+    </script>
+</body>
+</html>

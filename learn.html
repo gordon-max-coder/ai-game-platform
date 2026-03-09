@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学习中心 - GameAI</title>
+    <link rel="stylesheet" href="css/header.css">
+    <link rel="stylesheet" href="css/navigation.css">
+    <link rel="stylesheet" href="css/learn.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <header class="top-navbar">
+        <a href="index.html" class="navbar-brand">
+            <img src="images/logo.svg" alt="Logo" onerror="this.style.display='none'">
+            <span>GameAI</span>
+        </a>
+
+        <div class="navbar-right">
+            <div id="navbarUserContainer">
+                <!-- 由 navbar.js 动态填充 -->
+            </div>
+        </div>
+    </header>
+
+    <!-- 页面包装器 -->
+    <div class="page-wrapper">
+        <!-- 左侧工具栏 -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="index.html">
+                    <span class="icon">🏠</span>
+                    <span>首页</span>
+                </a>
+                <a href="create.html">
+                    <span class="icon">✨</span>
+                    <span>创建</span>
+                </a>
+                <a href="games.html">
+                    <span class="icon">🎮</span>
+                    <span>游戏库</span>
+                </a>
+                <a href="my-games.html">
+                    <span class="icon">🎯</span>
+                    <span>我的游戏</span>
+                </a>
+                <a href="learn.html" class="active">
+                    <span class="icon">📚</span>
+                    <span>学习</span>
+                </a>
+            </nav>
+
+            <!-- 用户状态容器 -->
+            <div id="sidebarUserContainer">
+                <!-- 由 user-state.js 动态填充 -->
+            </div>
+
+            <div class="sidebar-social">
+                <a href="#" class="social-link">Discord</a>
+                <a href="#" class="social-link">Twitter</a>
+                <a href="#" class="social-link">YouTube</a>
+            </div>
+        </aside>
+
+        <!-- 主内容 -->
+        <div class="main-wrapper">
+            <main class="main-content">
+                <header class="page-header">
+                    <h1>📚 学习中心</h1>
+                    <p>掌握 AI 游戏创作的技巧和最佳实践</p>
+                </header>
+
+                <!-- 教程区域 -->
+                <section class="tutorials-section">
+                    <h2>📖 教程</h2>
+                    <div class="tutorials-grid">
+                        <div class="tutorial-card">
+                            <div class="tutorial-thumb">🎮</div>
+                            <div class="tutorial-content">
+                                <span class="tutorial-tag">入门</span>
+                                <h3>第一次创建游戏</h3>
+                                <p>从零开始，学习如何使用 GameAI 创建你的第一款游戏</p>
+                                <div class="tutorial-meta">
+                                    <span>⏱️ 10 分钟</span>
+                                    <span>📊 初级</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tutorial-card">
+                            <div class="tutorial-thumb">✍️</div>
+                            <div class="tutorial-content">
+                                <span class="tutorial-tag">技巧</span>
+                                <h3>如何写出好的游戏描述</h3>
+                                <p>学习如何清晰地表达你的游戏创意，让 AI 更好地理解</p>
+                                <div class="tutorial-meta">
+                                    <span>⏱️ 5 分钟</span>
+                                    <span>📊 初级</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tutorial-card">
+                            <div class="tutorial-thumb">🎨</div>
+                            <div class="tutorial-content">
+                                <span class="tutorial-tag">进阶</span>
+                                <h3>选择合适的美术风格</h3>
+                                <p>了解不同美术风格的特点，为你的游戏选择最佳视觉效果</p>
+                                <div class="tutorial-meta">
+                                    <span>⏱️ 15 分钟</span>
+                                    <span>📊 中级</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tutorial-card">
+                            <div class="tutorial-thumb">⚙️</div>
+                            <div class="tutorial-content">
+                                <span class="tutorial-tag">进阶</span>
+                                <h3>游戏机制设计基础</h3>
+                                <p>学习游戏设计的基本原则，创造有趣的游戏体验</p>
+                                <div class="tutorial-meta">
+                                    <span>⏱️ 20 分钟</span>
+                                    <span>📊 中级</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 快速提示 -->
+                <section class="tips-section">
+                    <h2>💡 快速提示</h2>
+                    <div class="tips-grid">
+                        <div class="tip-card">
+                            <div class="tip-icon">🎯</div>
+                            <h4>保持描述简洁</h4>
+                            <p>用简单清晰的语言描述核心玩法，避免过于复杂的设定</p>
+                        </div>
+                        <div class="tip-card">
+                            <div class="tip-icon">🎮</div>
+                            <h4>参考经典游戏</h4>
+                            <p>提及类似游戏可以帮助 AI 更好地理解你的想法</p>
+                        </div>
+                        <div class="tip-card">
+                            <div class="tip-icon">🔄</div>
+                            <h4>多次迭代</h4>
+                            <p>不要期望一次完美，通过多次调整获得最佳效果</p>
+                        </div>
+                        <div class="tip-card">
+                            <div class="tip-icon">🎨</div>
+                            <h4>尝试不同风格</h4>
+                            <p>同一玩法尝试不同美术风格，可能会有惊喜</p>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- 示例提示 -->
+                <section class="examples-section">
+                    <h2>📖 示例提示</h2>
+                    <div class="examples-list">
+                        <div class="example-item">
+                            <div class="example-header">
+                                <span class="example-type">动作游戏</span>
+                            </div>
+                            <p class="example-prompt">创建一个 2D 横版动作游戏，玩家扮演忍者，可以跳跃、攻击和使用特殊技能，有多个关卡和 Boss 战</p>
+                        </div>
+                        <div class="example-item">
+                            <div class="example-header">
+                                <span class="example-type">益智游戏</span>
+                            </div>
+                            <p class="example-prompt">创建一个颜色匹配益智游戏，玩家需要旋转管道让彩色液体流向正确的容器，有 50 个逐渐变难的关卡</p>
+                        </div>
+                        <div class="example-item">
+                            <div class="example-header">
+                                <span class="example-type">模拟游戏</span>
+                            </div>
+                            <p class="example-prompt">创建一个咖啡店经营模拟游戏，玩家需要制作咖啡、服务顾客、升级设备和装修店铺</p>
+                        </div>
+                    </div>
+                </section>
+            </main>
+
+            <!-- 页脚 -->
+            <footer class="footer">
+                <div class="footer-content">
+                    <div class="footer-section">
+                        <h4>GameAI</h4>
+                        <p>让游戏创作变得简单</p>
+                    </div>
+                    <div class="footer-section">
+                        <h4>链接</h4>
+                        <a href="create.html">创建游戏</a>
+                        <a href="learn.html">学习中心</a>
+                        <a href="my-games.html">我的游戏</a>
+                    </div>
+                </div>
+                <div class="footer-bottom">
+                    <p>&copy; 2025 GameAI. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script src="js/navbar.js"></script>
+    <script src="js/user-state.js"></script>
+</body>
+</html>

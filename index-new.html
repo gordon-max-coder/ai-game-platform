@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GameAI - AI 游戏生成平台</title>
+    <link rel="stylesheet" href="css/header.css">
+    <link rel="stylesheet" href="css/navigation.css">
+    <link rel="stylesheet" href="css/index.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <header class="top-navbar">
+        <a href="index.html" class="navbar-brand">
+            <img src="images/logo.svg" alt="Logo" onerror="this.style.display='none'">
+            <span>GameAI</span>
+        </a>
+
+        <div class="navbar-right">
+            <nav class="navbar-links">
+                <a href="index.html" class="active">首页</a>
+                <a href="create.html">创建</a>
+                <a href="games.html">游戏库</a>
+                <a href="my-games.html">我的游戏</a>
+                <a href="learn.html">学习</a>
+            </nav>
+
+            <div id="navbarUserContainer">
+                <!-- 由 navbar.js 动态填充 -->
+            </div>
+        </div>
+    </header>
+
+    <!-- 页面包装器 -->
+    <div class="page-wrapper">
+        <!-- 左侧工具栏 -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="index.html" class="active">
+                    <span class="icon">🏠</span>
+                    <span>首页</span>
+                </a>
+                <a href="create.html">
+                    <span class="icon">✨</span>
+                    <span>创建</span>
+                </a>
+                <a href="games.html">
+                    <span class="icon">🎮</span>
+                    <span>游戏库</span>
+                </a>
+                <a href="my-games.html">
+                    <span class="icon">🎯</span>
+                    <span>我的游戏</span>
+                </a>
+                <a href="learn.html">
+                    <span class="icon">📚</span>
+                    <span>学习</span>
+                </a>
+            </nav>
+
+            <!-- 用户状态容器 -->
+            <div id="sidebarUserContainer">
+                <!-- 由 user-state.js 动态填充 -->
+            </div>
+
+            <div class="sidebar-social">
+                <a href="#" class="social-link">Discord</a>
+                <a href="#" class="social-link">Twitter</a>
+                <a href="#" class="social-link">YouTube</a>
+            </div>
+        </aside>
+
+        <!-- 主内容 -->
+        <div class="main-wrapper">
+            <main class="main-content">
+                <!-- Hero 区域 -->
+                <section class="hero">
+                    <div class="hero-content">
+                        <h1>用 AI 创造你的游戏梦想</h1>
+                        <p>只需描述你的想法，AI 就会帮你生成完整的游戏</p>
+                        <a href="create.html" class="btn-primary">立即创建游戏</a>
+                    </div>
+                    <div class="hero-image">
+                        <div style="width:100%;height:400px;background:linear-gradient(135deg, #667eea, #764ba2);border-radius:16px;"></div>
+                    </div>
+                </section>
+
+                <!-- 热门游戏 -->
+                <section class="games-section">
+                    <h2>玩家精选</h2>
+                    <div class="games-carousel">
+                        <div class="game-card">
+                            <div class="game-thumb" style="background: linear-gradient(135deg, #667eea, #764ba2);"></div>
+                            <div class="game-info">
+                                <h3>太空冒险</h3>
+                                <span class="plays">🔥 3.8M 次游玩</span>
+                            </div>
+                        </div>
+                        <div class="game-card">
+                            <div class="game-thumb" style="background: linear-gradient(135deg, #f093fb, #f5576c);"></div>
+                            <div class="game-info">
+                                <h3>进化合并</h3>
+                                <span class="plays">🔥 1.4M 次游玩</span>
+                            </div>
+                        </div>
+                        <div class="game-card">
+                            <div class="game-thumb" style="background: linear-gradient(135deg, #4facfe, #00f2fe);"></div>
+                            <div class="game-info">
+                                <h3>海洋成长</h3>
+                                <span class="plays">🔥 2.3M 次游玩</span>
+                            </div>
+                        </div>
+                        <div class="game-card">
+                            <div class="game-thumb" style="background: linear-gradient(135deg, #43e97b, #38f9d7);"></div>
+                            <div class="game-info">
+                                <h3>飞行冒险</h3>
+                                <span class="plays">🔥 1.9M 次游玩</span>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- CTA -->
+                <section class="cta-section">
+                    <h2>准备好创造你的第一款游戏了吗？</h2>
+                    <p>无需编程经验，只需发挥想象力</p>
+                    <a href="create.html" class="btn-primary btn-large">开始创建</a>
+                </section>
+            </main>
+
+            <!-- 页脚 -->
+            <footer class="footer">
+                <div class="footer-content">
+                    <div class="footer-section">
+                        <h4>GameAI</h4>
+                        <p>让游戏创作变得简单</p>
+                    </div>
+                    <div class="footer-section">
+                        <h4>链接</h4>
+                        <a href="create.html">创建游戏</a>
+                        <a href="games.html">游戏库</a>
+                        <a href="my-games.html">我的游戏</a>
+                    </div>
+                </div>
+                <div class="footer-bottom">
+                    <p>&copy; 2025 GameAI. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <!-- 脚本 -->
+    <script src="js/auth.js"></script>
+    <script src="js/navbar.js"></script>
+    <script src="js/user-state.js"></script>
+</body>
+</html>

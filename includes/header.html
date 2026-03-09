@@ -1,0 +1,28 @@
+<!-- 顶部导航栏 - 公共组件 -->
+<header class="top-navbar">
+    <!-- 左侧 Logo -->
+    <a href="index.html" class="navbar-brand">
+        <img src="images/logo.svg" alt="GameAI Logo" onerror="this.style.display='none'">
+        <span>GameAI</span>
+    </a>
+
+    <!-- 右侧区域 -->
+    <div class="navbar-right">
+        <!-- 导航链接（仅在非认证页面显示） -->
+        <nav class="navbar-links" id="navbarLinks">
+            <a href="index.html" id="nav-index">首页</a>
+            <a href="create.html" id="nav-create">创建</a>
+            <a href="games.html" id="nav-games">游戏库</a>
+            <a href="my-games.html" id="nav-my-games">我的游戏</a>
+            <a href="learn.html" id="nav-learn">学习</a>
+        </nav>
+
+        <!-- 用户状态 -->
+        <div id="navbarUserContainer">
+            <!-- 由 JavaScript 动态填充 -->
+        </div>
+    </div>
+</header>
+
+<!-- 页面包装器 -->
+<div class="page-wrapper">

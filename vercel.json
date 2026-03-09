@@ -1,0 +1,11 @@
+{
+  "name": "ai-game-generator",
+  "version": "1.0.0",
+  "description": "AI Game Generator - 一键部署到 Vercel",
+  "scripts": {
+    "deploy": "vercel --prod"
+  },
+  "keywords": ["ai", "game", "generator"],
+  "author": "",
+  "license": "MIT"
+}

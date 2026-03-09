@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>游戏库 - GameAI</title>
+    <link rel="stylesheet" href="css/header.css">
+    <link rel="stylesheet" href="css/navigation.css">
+    <link rel="stylesheet" href="css/games.css">
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <header class="top-navbar">
+        <a href="index.html" class="navbar-brand">
+            <img src="images/logo.svg" alt="Logo" onerror="this.style.display='none'">
+            <span>GameAI</span>
+        </a>
+
+        <div class="navbar-right">
+            <div id="navbarUserContainer">
+                <!-- 由 navbar.js 动态填充 -->
+            </div>
+        </div>
+    </header>
+
+    <!-- 页面包装器 -->
+    <div class="page-wrapper">
+        <!-- 左侧工具栏 -->
+        <aside class="sidebar">
+            <nav class="sidebar-nav">
+                <a href="index.html">
+                    <span class="icon">🏠</span>
+                    <span>首页</span>
+                </a>
+                <a href="create.html">
+                    <span class="icon">✨</span>
+                    <span>创建</span>
+                </a>
+                <a href="games.html" class="active">
+                    <span class="icon">🎮</span>
+                    <span>游戏库</span>
+                </a>
+                <a href="my-games.html">
+                    <span class="icon">🎯</span>
+                    <span>我的游戏</span>
+                </a>
+                <a href="learn.html">
+                    <span class="icon">📚</span>
+                    <span>学习</span>
+                </a>
+            </nav>
+
+            <!-- 用户状态容器 -->
+            <div id="sidebarUserContainer">
+                <!-- 由 user-state.js 动态填充 -->
+            </div>
+
+            <div class="sidebar-social">
+                <a href="#" class="social-link">Discord</a>
+                <a href="#" class="social-link">Twitter</a>
+                <a href="#" class="social-link">YouTube</a>
+            </div>
+        </aside>
+
+        <!-- 主内容 -->
+        <div class="main-wrapper">
+            <main class="main-content">
+                <header class="page-header">
+                    <h1>🎮 游戏库</h1>
+                    <p>探索由 AI 生成的精彩游戏</p>
+                </header>
+
+                <!-- 搜索和筛选 -->
+                <div class="library-filters">
+                    <div class="search-box">
+                        <input type="text" placeholder="搜索游戏..." class="search-input">
+                        <button class="search-btn">🔍</button>
+                    </div>
+                    <div class="filter-buttons">
+                        <button class="filter-btn active" data-filter="all">全部</button>
+                        <button class="filter-btn" data-filter="trending">热门</button>
+                        <button class="filter-btn" data-filter="action">动作</button>
+                        <button class="filter-btn" data-filter="adventure">冒险</button>
+                        <button class="filter-btn" data-filter="puzzle">益智</button>
+                        <button class="filter-btn" data-filter="simulation">模拟</button>
+                    </div>
+                </div>
+
+                <!-- 游戏网格 -->
+                <div class="games-grid">
+                    <div class="game-card-large">
+                        <div class="game-thumb" style="background: linear-gradient(135deg, #667eea, #764ba2);"></div>
+                        <div class="game-overlay">
+                            <button class="play-button">▶️ 开始游戏</button>
+                        </div>
+                        <div class="game-info">
+                            <h3>星际战士</h3>
+                            <p class="game-desc">在浩瀚宇宙中战斗，消灭外星敌人</p>
+                            <div class="game-meta">
+                                <span class="plays">🔥 3.8M</span>
+                                <span class="rating">⭐ 4.8</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="game-card">
+                        <div class="game-thumb" style="background: linear-gradient(135deg, #f093fb, #f5576c);"></div>
+                        <div class="game-overlay">
+                            <button class="play-button">▶️</button>
+                        </div>
+                        <div class="game-info">
+                            <h3>进化合并</h3>
+                            <div class="game-meta">
+                                <span class="plays">1.4M</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="game-card">
+                        <div class="game-thumb" style="background: linear-gradient(135deg, #4facfe, #00f2fe);"></div>
+                        <div class="game-overlay">
+                            <button class="play-button">▶️</button>
+                        </div>
+                        <div class="game-info">
+                            <h3>海洋成长</h3>
+                            <div class="game-meta">
+                                <span class="plays">2.3M</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="game-card">
+                        <div class="game-thumb" style="background: linear-gradient(135deg, #43e97b, #38f9d7);"></div>
+                        <div class="game-overlay">
+                            <button class="play-button">▶️</button>
+                        </div>
+                        <div class="game-info">
+                            <h3>飞行冒险</h3>
+                            <div class="game-meta">
+                                <span class="plays">1.9M</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 加载更多 -->
+                <div class="load-more">
+                    <button class="btn-load-more">加载更多游戏</button>
+                </div>
+            </main>
+
+            <!-- 页脚 -->
+            <footer class="footer">
+                <div class="footer-content">
+                    <div class="footer-section">
+                        <h4>GameAI</h4>
+                        <p>让游戏创作变得简单</p>
+                    </div>
+                    <div class="footer-section">
+                        <h4>链接</h4>
+                        <a href="create.html">创建游戏</a>
+                        <a href="games.html">游戏库</a>
+                        <a href="my-games.html">我的游戏</a>
+                    </div>
+                </div>
+                <div class="footer-bottom">
+                    <p>&copy; 2025 GameAI. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+    <script src="js/navbar.js"></script>
+    <script src="js/user-state.js"></script>
+</body>
+</html>

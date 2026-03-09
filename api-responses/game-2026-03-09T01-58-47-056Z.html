@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>弹球打砖块 - 双倍球道具版</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #0a0a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: 'Arial', sans-serif;
+    overflow: hidden;
+}
+canvas {
+    border: 2px solid #00f7ff;
+    border-radius: 8px;
+    box-shadow: 0 0 30px rgba(0, 247, 255, 0.3);
+}
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+canvas.width = 800;
+canvas.height = 600;
+
+// Game state
+let gameState = 'start'; // start, playing, gameover, win
+let score = 0;
+let lives = 3;
+let level = 1;
+let combo = 0;
+let maxCombo = 0;
+let particles = [];
+let shakeTimer = 0;
+let shakeIntensity = 0;
+
+// Paddle
+const paddle = {
+    x: canvas.width / 2 - 60,
+    y: canvas.height - 40,
+    width: 120,
+    height: 14,
+    speed: 8,
+    dx: 0,
+    color: '#00f7ff',
+    glowColor: 'rgba(0, 247, 255, 0.5)',
+    trail: []
+};
+
+// Ball class
+class Ball {
+    constructor(x, y, dx, dy) {
+        this.x = x || canvas.width / 2;
+        this.y = y || canvas.height - 60;
+        this.radius = 8;
+        this.dx = dx || 4 * (Math.random() > 0.5 ? 1 : -1);
+        this.dy = dy || -5;
+        this.speed = Math.sqrt(this.dx * this.dx + this.dy * this.dy);
+        this.color = '#fff';
+        this.glowColor = 'rgba(255, 255, 255, 0.6)';
+        this.trail = [];
+        this.active = true;
+    }
+
+    update() {
+        this.trail.push({ x: this.x, y: this.y, alpha: 1 });
+        if (this.trail.length > 12) this.trail.shift();
+        this.trail.forEach(t => t.alpha -= 0.08);
+
+        this.x += this.dx;
+        this.y += this.dy;
+
+        // Wall collision
+        if (this.x - this.radius < 0) {
+            this.x = this.radius;
+            this.dx = Math.abs(this.dx);
+        }
+        if (this.x + this.radius > canvas.width) {
+            this.x = canvas.width - this.radius;
+            this.dx = -Math.abs(this.dx);
+        }
+        if (this.y - this.radius < 0) {
+            this.y = this.radius;
+            this.dy = Math.abs(this.dy);
+        }
+
+        // Bottom - ball lost
+        if (this.y + this.radius > canvas.height) {
+            this.active = false;
+        }
+
+        // Paddle collision
+        if (this.dy > 0 &&
+            this.y + this.radius >= paddle.y &&
+            this.y + this.radius <= paddle.y + paddle.height + 6 &&
+            this.x >= paddle.x - this.radius &&
+            this.x <= paddle.x + paddle.width + this.radius) {
+
+            let hitPos = (this.x - (paddle.x + paddle.width / 2)) / (paddle.width / 2);
+            hitPos = Math.max(-0.9, Math.min(0.9, hitPos));
+
+            let angle = hitPos * Math.PI / 3;
+            let speed = Math.min(this.speed + 0.1, 9);
+            this.dx = speed * Math.sin(angle);
+            this.dy = -speed * Math.cos(angle);
+            this.y = paddle.y - this.radius;
+
+            combo = 0;
+
+            createParticles(this.x, paddle.y, paddle.color, 5);
+        }
+    }
+
+    draw() {
+        // Trail
+        this.trail.forEach(t => {
+            if (t.alpha > 0) {
+                ctx.beginPath();
+                ctx.arc(t.x, t.y, this.radius * t.alpha, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${t.alpha * 0.3})`;
+                ctx.fill();
+            }
+        });
+
+        // Glow
+        ctx.shadowBlur = 15;
+        ctx.shadowColor = this.glowColor;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Highlight
+        ctx.beginPath();
+        ctx.arc(this.x - 2, this.y - 2, this.radius * 0.4, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fill();
+    }
+}
+
+let balls = [new Ball()];
+
+// Bricks
+const brickConfig = {
+    rows: 6,
+    cols: 10,
+    width: 68,
+    height: 24,
+    padding: 4,
+    offsetTop: 60,
+    offsetLeft: 30
+};
+
+const brickColors = [
+    { fill: '#ff006e', glow: 'rgba(255, 0, 110, 0.5)', points: 60 },
+    { fill: '#ff5400', glow: 'rgba(255, 84, 0, 0.5)', points: 50 },
+    { fill: '#ffbe0b', glow: 'rgba(255, 190, 11, 0.5)', points: 40 },
+    { fill: '#00f5d4', glow: 'rgba(0, 245, 212, 0.5)', points: 30 },
+    { fill: '#00bbf9', glow: 'rgba(0, 187, 249, 0.5)', points: 20 },
+    { fill: '#9b5de5', glow: 'rgba(155, 93, 229, 0.5)', points: 10 }
+];
+
+let bricks = [];
+
+// Power-ups
+let powerUps = [];
+
+class PowerUp {
+    constructor(x, y, type) {
+        this.x = x;
+        this.y = y;
+        this.width = 30;
+        this.height = 16;
+        this.dy = 2.5;
+        this.type = type; // 'double'
+        this.active = true;
+        this.pulse = 0;
+        this.rotation = 0;
+    }
+
+    update() {
+        this.y += this.dy;
+        this.pulse += 0.1;
+        this.rotation += 0.05;
+
+        if (this.y > canvas.height) {
+            this.active = false;
+        }
+
+        // Paddle collision
+        if (this.y + this.height >= paddle.y &&
+            this.y <= paddle.y + paddle.height &&
+            this.x + this.width >= paddle.x &&
+            this.x <= paddle.x + paddle.width) {
+            this.active = false;
+            this.applyEffect();
+        }
+    }
+
+    applyEffect() {
+        if (this.type === 'double') {
+            let newBalls = [];
+            balls.forEach(ball => {
+                if (ball.active) {
+                    let angle1 = Math.atan2(ball.dy, ball.dx) + 0.3;
+                    let angle2 = Math.atan2(ball.dy, ball.dx) - 0.3;
+                    let speed = Math.sqrt(ball.dx * ball.dx + ball.dy * ball.dy);
+
+                    let b1 = new Ball(ball.x, ball.y, speed * Math.cos(angle1), speed * Math.sin(angle1));
+                    b1.color = '#ffee00';
+                    b1.glowColor = 'rgba(255, 238, 0, 0.6)';
+
+                    let b2 = new Ball(ball.x, ball.y, speed * Math.cos(angle2), speed * Math.sin(angle2));
+                    b2.color = '#ff66aa';
+                    b2.glowColor = 'rgba(255, 102, 170, 0.6)';
+
+                    newBalls.push(b1, b2);
+                }
+            });
+            balls.push(...newBalls);
+
+            createParticles(paddle.x + paddle.width / 2, paddle.y, '#ffee00', 20);
+            shakeTimer = 8;
+            shakeIntensity = 3;
+            score += 50;
+
+            showFloatingText(paddle.x + paddle.width / 2, paddle.y - 20, '🔮 DOUBLE BALL! +50', '#ffee00');
+        }
+    }
+
+    draw() {
+        let pulseSize = Math.sin(this.pulse) * 2;
+
+        ctx.save();
+        ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
+
+        // Outer glow
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = '#ffee00';
+
+        // Background capsule
+        ctx.beginPath();
+        let r = (this.height + pulseSize) / 2;
+        ctx.roundRect(-this.width / 2 - pulseSize / 2, -this.height / 2 - pulseSize / 2,
+            this.width + pulseSize, this.height + pulseSize, r);
+        ctx.fillStyle = 'rgba(255, 238, 0, 0.9)';
+        ctx.fill();
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+
+        // Icon text
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 11px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('×2', 0, 1);
+
+        // Orbiting particles
+        for (let i = 0; i < 3; i++) {
+            let angle = this.rotation + (i * Math.PI * 2 / 3);
+            let ox = Math.cos(angle) * 20;
+            let oy = Math.sin(angle) * 10;
+            ctx.beginPath();
+            ctx.arc(ox, oy, 2, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 238, 0, ${0.5 + Math.sin(this.pulse + i) * 0.3})`;
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+}
+
+// Floating text
+let floatingTexts = [];
+function showFloatingText(x, y, text, color) {
+    floatingTexts.push({ x, y, text, color, alpha: 1, dy: -2, life: 60 });
+}
+
+function createBricks() {
+    bricks = [];
+    for (let r = 0; r < brickConfig.rows; r++) {
+        for (let c = 0; c < brickConfig.cols; c++) {
+            let x = brickConfig.offsetLeft + c * (brickConfig.width + brickConfig.padding);
+            let y = brickConfig.offsetTop + r * (brickConfig.height + brickConfig.padding);
+            let colorIdx = r % brickColors.length;
+            let hits = level > 1 && r < 2 ? 2 : 1;
+
+            bricks.push({
+                x, y,
+                width: brickConfig.width,
+                height: brickConfig.height,
+                color: brickColors[colorIdx],
+                hits: hits,
+                maxHits: hits,
+                active: true,
+                shakeX: 0,
+                shakeY: 0
+            });
+        }
+    }
+}
+
+// Particles
+function createParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        let angle = Math.random() * Math.PI * 2;
+        let speed = Math.random() * 4 + 1;
+        particles.push({
+            x, y,
+            dx: Math.cos(angle) * speed,
+            dy: Math.sin(angle) * speed,
+            radius: Math.random() * 3 + 1,
+            color: color,
+            alpha: 1,
+            decay: Math.random() * 0.03 + 0.02
+        });
+    }
+}
+
+// Stars background
+let stars = [];
+for (let i = 0; i < 100; i++) {
+    stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        radius: Math.random() * 1.5 + 0.5,
+        alpha: Math.random(),
+        twinkle: Math.random() * 0.02 + 0.01
+    });
+}
+
+// Input
+let keys = {};
+let mouseX = canvas.width / 2;
+
+document.addEventListener('keydown', e => {
+    keys[e.key] = true;
+    if (e.key === ' ' || e.key === 'Enter') {
+        if (gameState === 'start') startGame();
+        else if (gameState === 'gameover' || gameState === 'win') resetGame();
+    }
+});
+document.addEventListener('keyup', e => keys[e.key] = false);
+canvas.addEventListener('mousemove', e => {
+    let rect = canvas.getBoundingClientRect();
+    mouseX = (e.clientX - rect.left) * (canvas.width / rect.width);
+});
+canvas.addEventListener('click', () => {
+    if (gameState === 'start') startGame();
+    else if (gameState === 'gameover' || gameState === 'win') resetGame();
+});
+
+// Touch support
+canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    let rect = canvas.getBoundingClientRect();
+    mouseX = (e.touches[0].clientX - rect.left) * (canvas.width / rect.width);
+});
+canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    if (gameState === 'start') startGame();
+    else if (gameState === 'gameover' || gameState === 'win') resetGame();
+});
+
+function startGame() {
+    gameState = 'playing';
+    score = 0;
+    lives = 3;
+    level = 1;
+    combo = 0;
+    maxCombo = 0;
+    balls = [new Ball()];
+    powerUps = [];
+    floatingTexts = [];
+    createBricks();
+}
+
+function resetGame() {
+    gameState = 'start';
+}
+
+function nextLevel() {
+    level++;
+    balls = [new Ball()];
+    powerUps = [];
+    paddle.x = canvas.width / 2 - paddle.width / 2;
+    createBricks();
+
+    if (level > 5) {
+        gameState = 'win';
+    }
+}
+
+function loseLife() {
+    lives--;
+    if (lives <= 0) {
+        gameState = 'gameover';
+        shakeTimer = 20;
+        shakeIntensity = 8;
+    } else {
+        balls = [new Ball()];
+        powerUps = [];
+    }
+}
+
+// Update
+function update() {
+    if (gameState !== 'playing') return;
+
+    // Paddle movement
+    if (keys['ArrowLeft'] || keys['a']) paddle.dx = -paddle.speed;
+    else if (keys['ArrowRight'] || keys['d']) paddle.dx = paddle.speed;
+    else {
+        // Mouse control
+        let targetX = mouseX - paddle.width / 2;
+        paddle.dx = (targetX - paddle.x) * 0.15;
+    }
+
+    paddle.x += paddle.dx;
+    paddle.x = Math.max(0, Math.min(canvas.width - paddle.width, paddle.x));
+
+    // Paddle trail
+    paddle.trail.push({ x: paddle.x + paddle.width / 2, y: paddle.y, alpha: 0.5 });
+    if (paddle.trail.length > 8) paddle.trail.shift();
+    paddle.trail.forEach(t => t.alpha -= 0.06);
+
+    // Update balls
+    balls.forEach(ball => ball.update());
+
+    // Check brick collisions for each ball
+    balls.forEach(ball => {
+        if (!ball.active) return;
+
+        bricks.forEach(brick => {
+            if (!brick.active) return;
+
+            if (ball.x + ball.radius > brick.x &&
+                ball.x - ball.radius < brick.x + brick.width &&
+                ball.y + ball.radius > brick.y &&
+                ball.y - ball.radius < brick.y + brick.height) {
+
+                // Determine collision side
+                let overlapLeft = (ball.x + ball.radius) - brick.x;
+                let overlapRight = (brick.x + brick.width) - (ball.x - ball.radius);
+                let overlapTop = (ball.y + ball.radius) - brick.y;
+                let overlapBottom = (brick.y + brick.height) - (ball.y - ball.radius);
+
+                let minOverlap = Math.min(overlapLeft, overlapRight, overlapTop, overlapBottom);
+
+                if (minOverlap === overlapLeft || minOverlap === overlapRight) {
+                    ball.dx = -ball.dx;
+                } else {
+                    ball.dy = -ball.dy;
+                }
+
+                brick.hits--;
+                brick.shakeX = (Math.random() - 0.5) * 6;
+                brick.shakeY = (Math.random() - 0.5) * 6;
+
+                if (brick.hits <= 0) {
+                    brick.active = false;
+                    combo++;
+                    maxCombo = Math.max(maxCombo, combo);
+                    let points = brick.color.points * (1 + Math.floor(combo / 5) * 0.5);
+                    score += Math.floor(points);
+
+                    createParticles(brick.x + brick.width / 2, brick.y + brick.height / 2, brick.color.fill, 12);
+
+                    if (combo > 0 && combo % 5 === 0) {
+                        showFloatingText(brick.x + brick.width / 2, brick.y, `🔥 ${combo} COMBO!`, '#ff006e');
+                    }
+
+                    // Drop double ball power-up (15% chance)
+                    if (Math.random() < 0.15) {
+                        powerUps.push(new PowerUp(
+                            brick.x + brick.width / 2 - 15,
+                            brick.y + brick.height / 2,
+                            'double'
+                        ));
+                    }
+
+                    shakeTimer = 4;
+                    shakeIntensity = 2;
+                } else {
+                    createParticles(ball.x, ball.y, '#fff', 3);
+                }
+            }
+        });
+    });
+
+    // Reduce brick shake
+    bricks.forEach(brick => {
+        brick.shakeX *= 0.8;
+        brick.shakeY *= 0.8;
+    });
+
+    // Remove inactive balls
+    let activeBalls = balls.filter(b => b.active);
+    if (activeBalls.length === 0) {
+        loseLife();
+    } else {
+        balls = activeBalls;
+    }
+
+    // Update power-ups
+    powerUps.forEach(p => p.update());
+    powerUps = powerUps.filter(p => p.active);
+
+    // Update particles
+    particles.forEach(p => {
+        p.x += p.dx;
+        p.y += p.dy;
+        p.dy += 0.05;
+        p.alpha -= p.decay;
+    });
+    particles = particles.filter(p => p.alpha > 0);
+
+    // Update floating texts
+    floatingTexts.forEach(t => {
+        t.y += t.dy;
+        t.alpha -= 0.015;
+        t.life--;
+    });
+    floatingTexts = floatingTexts.filter(t => t.life > 0 && t.alpha > 0);
+
+    // Screen shake
+    if (shakeTimer > 0) shakeTimer--;
+
+    // Check level complete
+    if (bricks.every(b => !b.active)) {
+        nextLevel();
+    }
+
+    // Update stars
+    stars.forEach(s => {
+        s.alpha += s.twinkle;
+        if (s.alpha > 1 || s.alpha < 0.2) s.twinkle = -s.twinkle;
+    });
+}
+
+// Draw functions
+function drawStars() {
+    stars.forEach(s => {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${s.alpha})`;
+        ctx.fill();
+    });
+}
+
+function drawPaddle() {
+    // Trail
+    paddle.trail.forEach(t => {
+        if (t.alpha > 0) {
+            ctx.fillStyle = `rgba(0, 247, 255, ${t.alpha * 0.2})`;
+            ctx.fillRect(paddle.x, t.y, paddle.width, paddle.height);
+        }
+    });
+
+    // Glow
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = paddle.glowColor;
+
+    // Main paddle
+    let gradient = ctx.createLinearGradient(paddle.x, paddle.y, paddle.x, paddle.y + paddle.height);
+    gradient.addColorStop(0, '#00f7ff');
+    gradient.addColorStop(1, '#0088ff');
+
+    ctx.beginPath();
+    ctx.roundRect(paddle.x, paddle.y, paddle.width, paddle.height, 7);
+    ctx.fillStyle = gradient;
+    ctx.fill();
+
+    // Highlight
+    ctx.beginPath();
+    ctx.roundRect(paddle.x + 4, paddle.y + 2, paddle.width - 8, paddle.height / 3, 3);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+    ctx.fill();
+
+    ctx.shadowBlur = 0;
+}
+
+function drawBricks() {
+    bricks.forEach(brick => {
+        if (!brick.active) return;
+
+        let x = brick.x + brick.shakeX;
+        let y = brick.y + brick.shakeY;
+
+        ctx.shadowBlur = 8;
+        ctx.shadowColor = brick.color.glow;
+
+        let alpha = brick.hits < brick.maxHits ? 0.6 : 1;
+
+        let gradient = ctx.createLinearGradient(x, y, x, y + brick.height);
+        gradient.addColorStop(0, brick.color.fill);
+        gradient.addColorStop(1, adjustBrightness(brick.color.fill, -30));
+
+        ctx.globalAlpha = alpha;
+        ctx.beginPath();
+        ctx.roundRect(x, y, brick.width, brick.height, 4);
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        // Highlight
+        ctx.beginPath();
+        ctx.roundRect(x + 2, y + 2, brick.width - 4, brick.height / 3, 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.fill();
+
+        // Multi-hit indicator
+        if (brick.maxHits > 1 && brick.hits > 1) {
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(brick.hits.toString(), x + brick.width / 2, y + brick.height / 2);
+        }
+
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+    });
+}
+
+function drawParticles() {
+    particles.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.alpha;
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+}
+
+function drawUI() {
+    // Score
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 20px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText(`分数: ${score}`, 15, 30);
+
+    // Level
+    ctx.textAlign = 'center';
+    ctx.fillText(`关卡 ${level}`, canvas.width / 2, 30);
+
+    // Lives
+    ctx.textAlign = 'right';
+    let livesText = '❤️'.repeat(lives);
+    ctx.fillText(livesText, canvas.width - 15, 30);
+
+    // Combo
+    if (combo >= 3) {
+        ctx.textAlign = 'center';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillStyle = `hsl(${(combo * 30) % 360}, 100%, 60%)`;
+        ctx.fillText(`连击 ×${combo}`, canvas.width / 2, 52);
+    }
+
+    // Ball count
+    if (balls.length > 1) {
+        ctx.textAlign = 'left';
+        ctx.font = 'bold 14px Arial';
+        ctx.fillStyle = '#ffee00';
+        ctx.fillText(`🔮 球数: ${balls.length}`, 15, 52);
+    }
+
+    // Floating texts
+    floatingTexts.forEach(t => {
+        ctx.globalAlpha = t.alpha;
+        ctx.font = 'bold 18px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = t.color;
+        ctx.fillText(t.text, t.x, t.y);
+    });
+    ctx.globalAlpha = 1;
+}
+
+function drawStartScreen() {
+    drawStars();
+
+    // Title
+    ctx.save();
+    let time = Date.now() / 1000;
+
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = '#00f7ff';
+    ctx.fillStyle = '#00f7ff';
+    ctx.font = 'bold 52px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('弹球打砖块', canvas.width / 2, canvas.height / 2 - 100);
+    ctx.shadowBlur = 0;
+
+    // Subtitle
+    ctx.fillStyle = '#ffee00';
+    ctx.font = 'bold 28px Arial';
+    ctx.fillText('🔮 双倍球道具版 🔮', canvas.width / 2, canvas.height / 2 - 50);
+
+    // Instructions
+    ctx.fillStyle = '#aaa';
+    ctx.font = '18px Arial';
+    ctx.fillText('鼠标/方向键 控制挡板', canvas.width / 2, canvas.height / 2 + 20);
+    ctx.fillText('接住金色 ×2 道具可以让球分裂！', canvas.width / 2, canvas.height / 2 + 50);
+
+    // Start button
+    let pulseAlpha = 0.5 + Math.sin(time * 3) * 0.3;
+    ctx.fillStyle = `rgba(0, 247, 255, ${pulseAlpha})`;
+    ctx.font = 'bold 24px Arial';
+    ctx.fillText('点击或按空格开始游戏', canvas.width / 2, canvas.height / 2 + 120);
+
+    // Animated balls
+    for (let i = 0; i < 5; i++) {
+        let bx = canvas.width / 2 + Math.cos(time * 2 + i * 1.2) * 200;
+        let by = canvas.height / 2 + Math.sin(time * 2 + i * 1.2) * 80 + 30;
+        ctx.beginPath();
+        ctx.arc(bx, by, 6, 0, Math.PI * 2);
+        ctx.fillStyle = ['#ff006e', '#ffee00', '#00f7ff', '#9b5de5', '#00f5d4'][i];
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.fill();
+    }
+    ctx.shadowBlur = 0;
+
+    ctx.restore();
+}
+
+function drawGameOverScreen() {
+    drawStars();
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.shadowBlur = 20;
+    ctx.shadowColor = '#ff006e';
+    ctx.fillStyle = '#ff006e';
+    ctx.font = 'bold 48px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('游戏结束', canvas.width / 2, canvas.height / 2 - 60);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px Arial';
+    ctx.fillText(`最终得分: ${score}`, canvas.width / 2, canvas.height / 2);
+
+    ctx.fillStyle = '#ffbe0b';
+    ctx.font = '20px Arial';
+    ctx.fillText(`最大连击: ${maxCombo}`, canvas.width / 2, canvas.height / 2 + 40);
+    ctx.fillText(`到达关卡: ${level}`, canvas.width / 2, canvas.height / 2 + 70);
+
+    let time = Date.now() / 1000;
+    let pulseAlpha = 0.5 + Math.sin(time * 3) * 0.3;
+    ctx.fillStyle = `rgba(255, 255, 255, ${pulseAlpha})`;
+    ctx.font = '22px Arial';
+    ctx.fillText('点击或按空格重新开始', canvas.width / 2, canvas.height / 2 + 130);
+}
+
+function drawWinScreen() {
+    drawStars();
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    let time = Date.now() / 1000;
+    ctx.shadowBlur = 30;
+    ctx.shadowColor = '#ffee00';
+    ctx.fillStyle = '#ffee00';
+    ctx.font = 'bold 52px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🎉 恭喜通关！ 🎉', canvas.width / 2, canvas.height / 2 - 60);
+    ctx.shadowBlur = 0;
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px Arial';
+    ctx.fillText(`总得分: ${score}`, canvas.width / 2, canvas.height / 2);
+
+    ctx.fillStyle = '#00f7ff';
+    ctx.font = '20px Arial';
+    ctx.fillText(`最大连击: ${maxCombo}`, canvas.width / 2, canvas.height / 2 + 40);
+
+    let pulseAlpha = 0.5 + Math.sin(time * 3) * 0.3;
+    ctx.fillStyle = `rgba(255, 255, 255, ${pulseAlpha})`;
+    ctx.font = '22px Arial';
+    ctx.fillText('点击或按空格重新开始', canvas.width / 2, canvas.height / 2 + 110);
+
+    // Celebration particles
+    if (Math.random() < 0.3) {
+        createParticles(
+            Math.random() * canvas.width,
+            Math.random() * canvas.height / 2,
+            ['#ff006e', '#ffee00', '#00f7ff', '#9b5de5', '#00f5d4'][Math.floor(Math.random() * 5)],
+            3
+        );
+    }
+}
+
+function adjustBrightness(hex, amount) {
+    let r = parseInt(hex.slice(1, 3), 16) + amount;
+    let g = parseInt(hex.slice(3, 5), 16) + amount;
+    let b = parseInt(hex.slice(5, 7), 16) + amount;
+    r = Math.max(0, Math.min(255, r));
+    g = Math.max(0, Math.min(255, g));
+    b = Math.max(0, Math.min(255, b));
+    return `rgb(${r},${g},${b})`;
+}
+
+// Main draw
+function draw() {
+    ctx.save();
+
+    // Screen shake
+    if (shakeTimer > 0) {
+        let sx = (Math.random() - 0.5) * shakeIntensity;
+        let sy = (Math.random() - 0.5) * shakeIntensity;
+        ctx.translate(sx, sy);
+    }
+
+    // Clear
+    ctx.fillStyle = '#0a0a2e';
+    ctx.fillRect(-10, -10, canvas.width + 20, canvas.height + 20);
+
+    if (gameState === 'start') {
+        drawStartScreen();
+    } else if (gameState === 'playing') {
+        drawStars();
+        drawBricks();
+        drawPaddle();
+        balls.forEach(ball => ball.draw());
+        powerUps.forEach(p => p.draw());
+        drawParticles();
+        drawUI();
+    } else if (gameState === 'gameover') {
+        drawBricks();
+        drawPaddle();
+        drawParticles();
+        drawGameOverScreen();
+    } else if (gameState === 'win') {
+        drawParticles();
+        drawWinScreen();
+    }
+
+    ctx.restore();
+}
+
+// Game loop
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+// Polyfill for roundRect
+if (!CanvasRenderingContext2D.prototype.roundRect) {
+    CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        if (typeof r === 'number') r = { tl: r, tr: r, br: r, bl: r };
+        else {
+            r = Object.assign({ tl: 0, tr: 0, br: 0, bl: 0 }, r);
+        }
+        let radius = typeof r === 'object' ? r.tl : r;
+        this.moveTo(x + radius, y);
+        this.lineTo(x + w - radius, y);
+        this.quadraticCurveTo(x + w, y, x + w, y + radius);
+        this.lineTo(x + w, y + h - radius);
+        this.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        this.lineTo(x + radius, y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - radius);
+        this.lineTo(x, y + radius);
+        this.quadraticCurveTo(x, y, x + radius, y);
+        this.closePath();
+    };
+}
+
+createBricks();
+gameLoop();
+</script>
+</body>
+</html>

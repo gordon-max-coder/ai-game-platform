@@ -1,0 +1,52 @@
+// 在 generateGame 函数的成功回调中添加保存逻辑
+// 找到这一行：showGameResult(prompt, gameCode);
+// 在它后面添加：
+
+// 保存到"我的游戏"
+const gameInfo = analyzePrompt(prompt);
+gameInfo.prompt = prompt;
+currentGameId = 'game_' + Date.now();
+
+const gameData = {
+    id: currentGameId,
+    code: gameCode,
+    codeLength: gameCode.length,
+    title: gameInfo.title,
+    description: gameInfo.description,
+    type: gameInfo.type,
+    style: gameInfo.style,
+    prompt: gameInfo.prompt,
+    version: currentVersion,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+};
+
+// 保存到 localStorage
+const games = JSON.parse(localStorage.getItem('gameai_my_games') || '[]');
+games.unshift(gameData);
+localStorage.setItem('gameai_my_games', JSON.stringify(games));
+
+console.log('💾 游戏已保存到"我的游戏"');
+
+
+// 在 modifyGame 函数的成功回调中更新保存逻辑
+// 找到这一行：updateGameDisplay();
+// 在它后面添加：
+
+// 更新"我的游戏"中的记录
+if (currentGameId) {
+    const games = JSON.parse(localStorage.getItem('gameai_my_games') || '[]');
+    const index = games.findIndex(g => g.id === currentGameId);
+    
+    if (index !== -1) {
+        games[index] = {
+            ...games[index],
+            code: gameCode,
+            codeLength: gameCode.length,
+            version: currentVersion,
+            updatedAt: new Date().toISOString()
+        };
+        localStorage.setItem('gameai_my_games', JSON.stringify(games));
+        console.log('💾 游戏已更新到"我的游戏"');
+    }
+}

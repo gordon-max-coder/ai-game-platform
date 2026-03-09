@@ -1,0 +1,846 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>双蛇对决 - Snake vs AI</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    background: #0a0a2e;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    font-family: 'Segoe UI', Arial, sans-serif;
+    overflow: hidden;
+}
+#gameContainer {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+#scoreboard {
+    display: flex;
+    justify-content: space-between;
+    width: 600px;
+    margin-bottom: 10px;
+    color: white;
+    font-size: 18px;
+}
+.score-panel {
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-weight: bold;
+}
+.player-score { background: rgba(0, 200, 100, 0.3); border: 2px solid #00c864; }
+.ai-score { background: rgba(255, 80, 80, 0.3); border: 2px solid #ff5050; }
+.timer-panel { background: rgba(255, 255, 255, 0.1); border: 2px solid #ffcc00; color: #ffcc00; }
+canvas {
+    border: 3px solid #1a1a5e;
+    border-radius: 8px;
+    box-shadow: 0 0 30px rgba(50, 50, 150, 0.5);
+}
+#message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 24px;
+    text-align: center;
+    pointer-events: none;
+    text-shadow: 0 0 10px rgba(255,255,255,0.5);
+    margin-top: 20px;
+}
+#instructions {
+    color: #8888cc;
+    margin-top: 10px;
+    font-size: 14px;
+    text-align: center;
+}
+#deathLog {
+    position: absolute;
+    top: 60px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ffcc00;
+    font-size: 16px;
+    font-weight: bold;
+    text-align: center;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+    text-shadow: 0 0 8px rgba(255, 200, 0, 0.8);
+}
+#finalResult {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 28px;
+    text-align: center;
+    pointer-events: none;
+    text-shadow: 0 0 15px rgba(255,255,255,0.7);
+    display: none;
+    background: rgba(0,0,0,0.8);
+    padding: 30px 50px;
+    border-radius: 15px;
+    border: 2px solid #ffcc00;
+    z-index: 10;
+}
+#finalResult button {
+    pointer-events: auto;
+    margin-top: 15px;
+    padding: 10px 30px;
+    font-size: 18px;
+    background: #ffcc00;
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+}
+#finalResult button:hover {
+    background: #ffdd44;
+}
+</style>
+</head>
+<body>
+<div id="gameContainer">
+    <div id="scoreboard">
+        <div class="score-panel player-score">🟢 玩家: <span id="playerScore">0</span></div>
+        <div class="score-panel timer-panel">⏱ <span id="timerDisplay">3:00</span></div>
+        <div class="score-panel" style="background:rgba(255,255,255,0.1);border:2px solid #666;color:#aaa;">
+            长度 - 你: <span id="playerLen">3</span> | AI: <span id="aiLen">3</span>
+        </div>
+        <div class="score-panel ai-score">🔴 AI: <span id="aiScore">0</span></div>
+    </div>
+    <canvas id="gameCanvas" width="600" height="600"></canvas>
+    <div id="deathLog"></div>
+    <div id="message">按任意方向键开始游戏<br><small style="font-size:14px;color:#aaa;">3分钟对决，撞对方则对方重生扣100分！</small></div>
+    <div id="instructions">方向键 / WASD 控制移动 | 吃食物增长得分 | 撞到对方：被撞者重生并扣100分 | 3分钟后分高者胜</div>
+    <div id="finalResult">
+        <div id="resultText"></div>
+        <button onclick="restartGame()">再来一局</button>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const GRID = 20;
+const COLS = canvas.width / GRID;
+const ROWS = canvas.height / GRID;
+
+const GAME_DURATION = 180; // 3 minutes in seconds
+const RESPAWN_PENALTY = 100;
+
+let gameStarted = false;
+let gameOver = false;
+let playerScore = 0;
+let aiScore = 0;
+let foods = [];
+let particles = [];
+let deathTimer = 0;
+let gameTime = GAME_DURATION;
+let lastTimestamp = 0;
+let timerInterval = null;
+
+const INITIAL_LENGTH = 3;
+
+// Player snake
+let player = {
+    body: [],
+    dir: { x: 1, y: 0 },
+    nextDir: { x: 1, y: 0 },
+    color: '#00e070',
+    headColor: '#00ff88',
+    alive: true,
+    respawnTimer: 0,
+    growCount: 0
+};
+
+// AI snake
+let ai = {
+    body: [],
+    dir: { x: -1, y: 0 },
+    nextDir: { x: -1, y: 0 },
+    color: '#ff4444',
+    headColor: '#ff6666',
+    alive: true,
+    respawnTimer: 0,
+    growCount: 0
+};
+
+function initSnake(snake, startX, startY, dirX, dirY) {
+    snake.body = [];
+    for (let i = 0; i < INITIAL_LENGTH; i++) {
+        snake.body.push({ x: startX - dirX * i, y: startY - dirY * i });
+    }
+    snake.dir = { x: dirX, y: dirY };
+    snake.nextDir = { x: dirX, y: dirY };
+    snake.alive = true;
+    snake.respawnTimer = 0;
+    snake.growCount = 0;
+}
+
+function init() {
+    initSnake(player, 5, Math.floor(ROWS / 2), 1, 0);
+    initSnake(ai, COLS - 6, Math.floor(ROWS / 2), -1, 0);
+    foods = [];
+    spawnFood();
+    spawnFood();
+    spawnFood();
+}
+
+function spawnFood() {
+    let attempts = 0;
+    while (attempts < 1000) {
+        let x = Math.floor(Math.random() * COLS);
+        let y = Math.floor(Math.random() * ROWS);
+        if (!isOccupied(x, y)) {
+            let type = Math.random() < 0.15 ? 'super' : 'normal';
+            foods.push({ x, y, type, pulse: 0 });
+            return;
+        }
+        attempts++;
+    }
+}
+
+function isOccupied(x, y) {
+    for (let seg of player.body) if (seg.x === x && seg.y === y) return true;
+    for (let seg of ai.body) if (seg.x === x && seg.y === y) return true;
+    for (let f of foods) if (f.x === x && f.y === y) return true;
+    return false;
+}
+
+function respawnSnake(snake, isPlayer) {
+    let startX, startY, dirX, dirY;
+    if (isPlayer) {
+        startX = 5;
+        startY = Math.floor(Math.random() * (ROWS - 6)) + 3;
+        dirX = 1; dirY = 0;
+    } else {
+        startX = COLS - 6;
+        startY = Math.floor(Math.random() * (ROWS - 6)) + 3;
+        dirX = -1; dirY = 0;
+    }
+    initSnake(snake, startX, startY, dirX, dirY);
+}
+
+function showDeathMessage(msg) {
+    const el = document.getElementById('deathLog');
+    el.textContent = msg;
+    el.style.opacity = 1;
+    clearTimeout(deathTimer);
+    deathTimer = setTimeout(() => { el.style.opacity = 0; }, 2000);
+}
+
+function createExplosion(x, y, color) {
+    for (let i = 0; i < 15; i++) {
+        particles.push({
+            x: x * GRID + GRID / 2,
+            y: y * GRID + GRID / 2,
+            vx: (Math.random() - 0.5) * 8,
+            vy: (Math.random() - 0.5) * 8,
+            life: 1,
+            color: color,
+            size: Math.random() * 4 + 2
+        });
+    }
+}
+
+function updateTimer() {
+    if (!gameStarted || gameOver) return;
+    gameTime--;
+    updateTimerDisplay();
+    if (gameTime <= 0) {
+        endGame();
+    }
+}
+
+function updateTimerDisplay() {
+    let minutes = Math.floor(gameTime / 60);
+    let seconds = gameTime % 60;
+    document.getElementById('timerDisplay').textContent =
+        minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+    // Flash red when time is low
+    if (gameTime <= 30) {
+        document.getElementById('timerDisplay').style.color = '#ff4444';
+    } else if (gameTime <= 60) {
+        document.getElementById('timerDisplay').style.color = '#ff8800';
+    }
+}
+
+function endGame() {
+    gameOver = true;
+    clearInterval(timerInterval);
+    let resultEl = document.getElementById('finalResult');
+    let resultText = document.getElementById('resultText');
+    let winner = '';
+    if (playerScore > aiScore) {
+        winner = '🎉 玩家获胜！🎉';
+        resultText.style.color = '#00ff88';
+    } else if (aiScore > playerScore) {
+        winner = '🤖 AI 获胜！';
+        resultText.style.color = '#ff5050';
+    } else {
+        winner = '🤝 平局！';
+        resultText.style.color = '#ffcc00';
+    }
+    resultText.innerHTML = '<div style="font-size:36px;margin-bottom:15px;">' + winner + '</div>' +
+        '<div style="font-size:20px;color:#ccc;">最终比分</div>' +
+        '<div style="font-size:24px;margin-top:8px;">🟢 玩家: ' + playerScore + ' | 🔴 AI: ' + aiScore + '</div>';
+    resultEl.style.display = 'block';
+    document.getElementById('message').textContent = '';
+}
+
+function restartGame() {
+    gameOver = false;
+    gameStarted = false;
+    playerScore = 0;
+    aiScore = 0;
+    gameTime = GAME_DURATION;
+    document.getElementById('playerScore').textContent = '0';
+    document.getElementById('aiScore').textContent = '0';
+    document.getElementById('timerDisplay').textContent = '3:00';
+    document.getElementById('timerDisplay').style.color = '#ffcc00';
+    document.getElementById('finalResult').style.display = 'none';
+    document.getElementById('message').innerHTML = '按任意方向键开始游戏<br><small style="font-size:14px;color:#aaa;">3分钟对决，撞对方则对方重生扣100分！</small>';
+    particles = [];
+    foods = [];
+    init();
+}
+
+// AI pathfinding
+function updateAI() {
+    if (!ai.alive) return;
+
+    let head = ai.body[0];
+    let bestFood = null;
+    let bestDist = Infinity;
+
+    for (let f of foods) {
+        let wrapDistX = Math.min(Math.abs(f.x - head.x), COLS - Math.abs(f.x - head.x));
+        let wrapDistY = Math.min(Math.abs(f.y - head.y), ROWS - Math.abs(f.y - head.y));
+        let dist = wrapDistX + wrapDistY;
+        if (f.type === 'super') dist -= 5;
+        if (dist < bestDist) {
+            bestDist = dist;
+            bestFood = f;
+        }
+    }
+
+    if (!bestFood) return;
+
+    let possibleDirs = [
+        { x: 0, y: -1 },
+        { x: 0, y: 1 },
+        { x: -1, y: 0 },
+        { x: 1, y: 0 }
+    ];
+
+    possibleDirs = possibleDirs.filter(d => !(d.x === -ai.dir.x && d.y === -ai.dir.y));
+
+    let bestDir = null;
+    let bestScore = -Infinity;
+
+    for (let d of possibleDirs) {
+        let nx = head.x + d.x;
+        let ny = head.y + d.y;
+        nx = (nx + COLS) % COLS;
+        ny = (ny + ROWS) % ROWS;
+
+        let safe = true;
+        for (let seg of ai.body) {
+            if (seg.x === nx && seg.y === ny) { safe = false; break; }
+        }
+        // AI now also tries to avoid player body (it doesn't want to crash into player)
+        if (player.alive) {
+            for (let seg of player.body) {
+                if (seg.x === nx && seg.y === ny) { safe = false; break; }
+            }
+        }
+
+        if (!safe) continue;
+
+        let wrapDistX = Math.min(Math.abs(bestFood.x - nx), COLS - Math.abs(bestFood.x - nx));
+        let wrapDistY = Math.min(Math.abs(bestFood.y - ny), ROWS - Math.abs(bestFood.y - ny));
+        let dist = wrapDistX + wrapDistY;
+
+        let score = -dist;
+
+        let nnx = (nx + d.x + COLS) % COLS;
+        let nny = (ny + d.y + ROWS) % ROWS;
+        let nextSafe = true;
+        for (let seg of ai.body) {
+            if (seg.x === nnx && seg.y === nny) { nextSafe = false; break; }
+        }
+        if (nextSafe) score += 2;
+
+        if (player.alive) {
+            let playerHead = player.body[0];
+            let pDist = Math.abs(playerHead.x - nx) + Math.abs(playerHead.y - ny);
+            if (pDist <= 2) score -= 10;
+        }
+
+        if (score > bestScore) {
+            bestScore = score;
+            bestDir = d;
+        }
+    }
+
+    if (bestDir) {
+        ai.nextDir = bestDir;
+    } else {
+        for (let d of possibleDirs) {
+            ai.nextDir = d;
+            break;
+        }
+    }
+}
+
+function moveSnake(snake) {
+    if (!snake.alive) {
+        snake.respawnTimer--;
+        if (snake.respawnTimer <= 0) {
+            respawnSnake(snake, snake === player);
+        }
+        return;
+    }
+
+    snake.dir = { ...snake.nextDir };
+    let head = snake.body[0];
+    let newHead = {
+        x: (head.x + snake.dir.x + COLS) % COLS,
+        y: (head.y + snake.dir.y + ROWS) % ROWS
+    };
+
+    snake.body.unshift(newHead);
+
+    if (snake.growCount > 0) {
+        snake.growCount--;
+    } else {
+        snake.body.pop();
+    }
+}
+
+function checkCollisions() {
+    if (gameOver) return;
+
+    let playerHead = player.body[0];
+    let aiHead = ai.body[0];
+    let playerDied = false;
+    let aiDied = false;
+
+    // Check player self-collision
+    if (player.alive) {
+        for (let i = 1; i < player.body.length; i++) {
+            if (playerHead.x === player.body[i].x && playerHead.y === player.body[i].y) {
+                playerDied = true;
+                break;
+            }
+        }
+    }
+
+    // Check AI self-collision
+    if (ai.alive) {
+        for (let i = 1; i < ai.body.length; i++) {
+            if (aiHead.x === ai.body[i].x && aiHead.y === ai.body[i].y) {
+                aiDied = true;
+                break;
+            }
+        }
+    }
+
+    // Head-on collision: both heads at the same position
+    if (player.alive && ai.alive && !playerDied && !aiDied) {
+        if (playerHead.x === aiHead.x && playerHead.y === aiHead.y) {
+            // Both die
+            playerDied = true;
+            aiDied = true;
+        }
+    }
+
+    // Check player head hits AI body (player crashes into AI → AI dies and respawns, loses 100)
+    // "我撞它" means player's head hits AI's body → AI respawns (被撞者重生)
+    if (player.alive && ai.alive && !playerDied && !aiDied) {
+        for (let i = 1; i < ai.body.length; i++) {
+            if (playerHead.x === ai.body[i].x && playerHead.y === ai.body[i].y) {
+                // Player crashed into AI body → AI (被撞者) dies and respawns
+                aiDied = true;
+                break;
+            }
+        }
+    }
+
+    // Check AI head hits player body (AI crashes into player → player dies and respawns, loses 100)
+    // "它撞我" means AI's head hits player's body → player respawns (被撞者重生)
+    // Wait, re-reading: "我撞它我重生" - no wait...
+    // "我撞它并不是同归于尽，我撞它我重生。它撞我它重生。"
+    // So: 我(player)撞它(AI) → 我(player)重生. 它(AI)撞我(player) → 它(AI)重生.
+    // The one who does the crashing (active crasher) respawns.
+    // Actually let me re-read: "我撞它我重生" = when I crash into it, I respawn
+    // "它撞我它重生" = when it crashes into me, it respawns
+    // So: player head hits AI body → player respawns (not AI)
+    // AI head hits player body → AI respawns (not player)
+
+    // Let me redo this logic:
+    // Reset the flags
+    playerDied = false;
+    aiDied = false;
+
+    // Re-check self collisions
+    if (player.alive) {
+        for (let i = 1; i < player.body.length; i++) {
+            if (playerHead.x === player.body[i].x && playerHead.y === player.body[i].y) {
+                playerDied = true;
+                break;
+            }
+        }
+    }
+
+    if (ai.alive) {
+        for (let i = 1; i < ai.body.length; i++) {
+            if (aiHead.x === ai.body[i].x && aiHead.y === ai.body[i].y) {
+                aiDied = true;
+                break;
+            }
+        }
+    }
+
+    // Head-on collision
+    if (player.alive && ai.alive && !playerDied && !aiDied) {
+        if (playerHead.x === aiHead.x && playerHead.y === aiHead.y) {
+            playerDied = true;
+            aiDied = true;
+        }
+    }
+
+    // Player head hits AI body → player respawns (我撞它我重生)
+    if (player.alive && ai.alive && !playerDied && !aiDied) {
+        for (let i = 1; i < ai.body.length; i++) {
+            if (playerHead.x === ai.body[i].x && playerHead.y === ai.body[i].y) {
+                playerDied = true;
+                break;
+            }
+        }
+    }
+
+    // AI head hits player body → AI respawns (它撞我它重生)
+    if (ai.alive && player.alive && !aiDied && !playerDied) {
+        for (let i = 1; i < player.body.length; i++) {
+            if (aiHead.x === player.body[i].x && aiHead.y === player.body[i].y) {
+                aiDied = true;
+                break;
+            }
+        }
+    }
+
+    // Process deaths
+    if (playerDied && player.alive) {
+        player.alive = false;
+        player.respawnTimer = 5;
+        playerScore -= RESPAWN_PENALTY;
+        if (playerScore < 0) playerScore = 0;
+        createExplosion(playerHead.x, playerHead.y, player.color);
+        if (aiDied) {
+            showDeathMessage('💥 双方碰撞！各自重生 -100分！');
+        } else {
+            showDeathMessage('💀 玩家撞击重生！-100分');
+        }
+        document.getElementById('playerScore').textContent = playerScore;
+    }
+
+    if (aiDied && ai.alive) {
+        ai.alive = false;
+        ai.respawnTimer = 5;
+        aiScore -= RESPAWN_PENALTY;
+        if (aiScore < 0) aiScore = 0;
+        createExplosion(aiHead.x, aiHead.y, ai.color);
+        if (!playerDied) {
+            showDeathMessage('🎯 AI撞击重生！-100分');
+        }
+        document.getElementById('aiScore').textContent = aiScore;
+    }
+
+    // Check food collisions
+    if (player.alive) {
+        for (let i = foods.length - 1; i >= 0; i--) {
+            if (playerHead.x === foods[i].x && playerHead.y === foods[i].y) {
+                let pts = foods[i].type === 'super' ? 50 : 10;
+                let grow = foods[i].type === 'super' ? 3 : 1;
+                playerScore += pts;
+                player.growCount += grow;
+                createExplosion(foods[i].x, foods[i].y, '#00ff88');
+                foods.splice(i, 1);
+                spawnFood();
+                document.getElementById('playerScore').textContent = playerScore;
+            }
+        }
+    }
+
+    if (ai.alive) {
+        for (let i = foods.length - 1; i >= 0; i--) {
+            if (aiHead.x === foods[i].x && aiHead.y === foods[i].y) {
+                let pts = foods[i].type === 'super' ? 50 : 10;
+                let grow = foods[i].type === 'super' ? 3 : 1;
+                aiScore += pts;
+                ai.growCount += grow;
+                createExplosion(foods[i].x, foods[i].y, '#ff6666');
+                foods.splice(i, 1);
+                spawnFood();
+                document.getElementById('aiScore').textContent = aiScore;
+            }
+        }
+    }
+}
+
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= 0.02;
+        p.vx *= 0.98;
+        p.vy *= 0.98;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+function drawGrid() {
+    ctx.strokeStyle = 'rgba(50, 50, 100, 0.3)';
+    ctx.lineWidth = 0.5;
+    for (let x = 0; x <= COLS; x++) {
+        ctx.beginPath();
+        ctx.moveTo(x * GRID, 0);
+        ctx.lineTo(x * GRID, canvas.height);
+        ctx.stroke();
+    }
+    for (let y = 0; y <= ROWS; y++) {
+        ctx.beginPath();
+        ctx.moveTo(0, y * GRID);
+        ctx.lineTo(canvas.width, y * GRID);
+        ctx.stroke();
+    }
+}
+
+function drawSnake(snake) {
+    if (!snake.alive) {
+        // Draw ghost
+        ctx.globalAlpha = 0.3;
+        let ghostX = snake === player ? 5 : COLS - 6;
+        let ghostY = Math.floor(ROWS / 2);
+        ctx.fillStyle = snake.color;
+        ctx.fillRect(ghostX * GRID + 2, ghostY * GRID + 2, GRID - 4, GRID - 4);
+        ctx.globalAlpha = 1;
+        // Draw respawn countdown
+        ctx.fillStyle = 'white';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(Math.ceil(snake.respawnTimer), ghostX * GRID + GRID/2, ghostY * GRID + GRID/2 + 4);
+        return;
+    }
+
+    for (let i = snake.body.length - 1; i >= 0; i--) {
+        let seg = snake.body[i];
+        let x = seg.x * GRID;
+        let y = seg.y * GRID;
+
+        if (i === 0) {
+            // Head
+            ctx.fillStyle = snake.headColor;
+            ctx.shadowColor = snake.headColor;
+            ctx.shadowBlur = 10;
+            ctx.beginPath();
+            ctx.roundRect(x + 1, y + 1, GRID - 2, GRID - 2, 5);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Eyes
+            ctx.fillStyle = '#000';
+            let eyeSize = 3;
+            if (snake.dir.x === 1) {
+                ctx.fillRect(x + GRID - 7, y + 4, eyeSize, eyeSize);
+                ctx.fillRect(x + GRID - 7, y + GRID - 7, eyeSize, eyeSize);
+            } else if (snake.dir.x === -1) {
+                ctx.fillRect(x + 4, y + 4, eyeSize, eyeSize);
+                ctx.fillRect(x + 4, y + GRID - 7, eyeSize, eyeSize);
+            } else if (snake.dir.y === -1) {
+                ctx.fillRect(x + 4, y + 4, eyeSize, eyeSize);
+                ctx.fillRect(x + GRID - 7, y + 4, eyeSize, eyeSize);
+            } else {
+                ctx.fillRect(x + 4, y + GRID - 7, eyeSize, eyeSize);
+                ctx.fillRect(x + GRID - 7, y + GRID - 7, eyeSize, eyeSize);
+            }
+        } else {
+            // Body
+            let alpha = 0.9 - (i / snake.body.length) * 0.4;
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = snake.color;
+            ctx.beginPath();
+            ctx.roundRect(x + 2, y + 2, GRID - 4, GRID - 4, 3);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        }
+    }
+}
+
+function drawFood() {
+    for (let f of foods) {
+        f.pulse += 0.05;
+        let scale = 1 + Math.sin(f.pulse) * 0.15;
+        let size = (GRID - 4) * scale;
+        let offset = (GRID - size) / 2;
+
+        if (f.type === 'super') {
+            ctx.fillStyle = '#ffdd00';
+            ctx.shadowColor = '#ffdd00';
+            ctx.shadowBlur = 15;
+            ctx.beginPath();
+            // Star shape
+            let cx = f.x * GRID + GRID / 2;
+            let cy = f.y * GRID + GRID / 2;
+            let outerR = size / 2;
+            let innerR = outerR * 0.4;
+            for (let i = 0; i < 10; i++) {
+                let r = i % 2 === 0 ? outerR : innerR;
+                let angle = (Math.PI * 2 * i / 10) - Math.PI / 2;
+                if (i === 0) ctx.moveTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+                else ctx.lineTo(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        } else {
+            ctx.fillStyle = '#ff6688';
+            ctx.shadowColor = '#ff6688';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(f.x * GRID + GRID / 2, f.y * GRID + GRID / 2, size / 2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+    }
+}
+
+function drawParticles() {
+    for (let p of particles) {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+}
+
+// Draw timer bar at top of canvas
+function drawTimerBar() {
+    let ratio = gameTime / GAME_DURATION;
+    let barWidth = canvas.width * ratio;
+    let barHeight = 4;
+
+    // Background
+    ctx.fillStyle = 'rgba(255,255,255,0.1)';
+    ctx.fillRect(0, 0, canvas.width, barHeight);
+
+    // Timer bar
+    let color;
+    if (ratio > 0.5) color = '#00cc66';
+    else if (ratio > 0.2) color = '#ffaa00';
+    else color = '#ff3333';
+
+    ctx.fillStyle = color;
+    ctx.fillRect(0, 0, barWidth, barHeight);
+}
+
+let tickCount = 0;
+const GAME_SPEED = 8; // ticks per move
+
+function gameLoop() {
+    if (gameOver) {
+        // Still draw the final state
+        ctx.fillStyle = '#0a0a2e';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawGrid();
+        drawFood();
+        drawSnake(player);
+        drawSnake(ai);
+        drawParticles();
+        drawTimerBar();
+        updateParticles();
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+
+    tickCount++;
+
+    if (gameStarted && tickCount % GAME_SPEED === 0) {
+        updateAI();
+        moveSnake(player);
+        moveSnake(ai);
+        checkCollisions();
+
+        // Maintain food count
+        while (foods.length < 3) spawnFood();
+    }
+
+    // Draw
+    ctx.fillStyle = '#0a0a2e';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawGrid();
+    drawTimerBar();
+    drawFood();
+    drawSnake(player);
+    drawSnake(ai);
+    drawParticles();
+    updateParticles();
+
+    // Update length display
+    document.getElementById('playerLen').textContent = player.alive ? player.body.length : 0;
+    document.getElementById('aiLen').textContent = ai.alive ? ai.body.length : 0;
+
+    requestAnimationFrame(gameLoop);
+}
+
+// Input handling
+document.addEventListener('keydown', (e) => {
+    if (gameOver) return;
+
+    if (!gameStarted) {
+        if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','a','s','d','W','A','S','D'].includes(e.key)) {
+            gameStarted = true;
+            document.getElementById('message').textContent = '';
+            // Start the timer
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+    }
+
+    if (!player.alive) return;
+
+    switch (e.key) {
+        case 'ArrowUp': case 'w': case 'W':
+            if (player.dir.y !== 1) player.nextDir = { x: 0, y: -1 };
+            break;
+        case 'ArrowDown': case 's': case 'S':
+            if (player.dir.y !== -1) player.nextDir = { x: 0, y: 1 };
+            break;
+        case 'ArrowLeft': case 'a': case 'A':
+            if (player.dir.x !== 1) player.nextDir = { x: -1, y: 0 };
+            break;
+        case 'ArrowRight': case 'd': case 'D':
+            if (player.dir.x !== -1) player.nextDir = { x: 1, y: 0 };
+            break;
+    }
+    e.preventDefault();
+});
+
+init();
+gameLoop();
+</script>
+</body>
+</html>

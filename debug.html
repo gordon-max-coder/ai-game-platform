@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 游戏生成器 - 调试版</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .log {
+            background: #1a1a2e;
+            color: #00ff00;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .game-frame {
+            width: 100%;
+            height: 500px;
+            border: 3px solid #667eea;
+            border-radius: 10px;
+            margin-top: 20px;
+            background: #000;
+            display: none;
+        }
+        .input-group { margin: 20px 0; }
+        textarea {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 15px;
+            min-height: 100px;
+            font-family: inherit;
+        }
+        .debug-info {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .code-preview {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            max-height: 300px;
+            overflow: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎮 AI 游戏生成器 - 调试版</h1>
+        <p style="color: #666; margin-bottom: 20px;">详细调试 AI 生成的游戏代码</p>
+
+        <div class="debug-info">
+            <strong>📋 使用说明：</strong>
+            <ol style="margin-left: 20px; margin-top: 10px;">
+                <li>输入游戏描述或使用示例</li>
+                <li>点击生成游戏</li>
+                <li>查看日志输出，了解 AI 返回了什么</li>
+                <li>检查生成的代码是否正确</li>
+                <li>如果游戏不显示，查看日志中的错误信息</li>
+            </ol>
+        </div>
+
+        <div class="input-group">
+            <label style="display: block; margin-bottom: 8px; font-weight: 600;">游戏描述：</label>
+            <textarea id="prompt" placeholder="例如：创建一个太空射击游戏，玩家控制飞船躲避陨石并消灭敌人"></textarea>
+        </div>
+
+        <div>
+            <button class="btn" onclick="generateGame()">✨ 生成游戏</button>
+            <button class="btn" onclick="loadSavedGame()">📂 加载上次保存的游戏</button>
+            <button class="btn" onclick="loadDemo()">🎮 加载本地 Demo</button>
+        </div>
+
+        <div class="log" id="log">等待生成...\n</div>
+
+        <iframe class="game-frame" id="gameFrame"></iframe>
+
+        <div class="code-preview" id="codePreview" style="display: none;"></div>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api/generate';
+        let currentGameCode = null;
+
+        function log(message) {
+            const logEl = document.getElementById('log');
+            const time = new Date().toLocaleTimeString();
+            logEl.textContent += `[${time}] ${message}\n`;
+            logEl.scrollTop = logEl.scrollHeight;
+            console.log(message);
+        }
+
+        function useExample(text) {
+            document.getElementById('prompt').value = text;
+        }
+
+        function extractHtmlCode(text) {
+            log('📊 原始响应长度：' + text.length + ' 字符');
+            
+            // 移除 markdown
+            if (text.includes('```html')) {
+                const start = text.indexOf('```html') + 7;
+                const end = text.indexOf('```', start);
+                if (end !== -1) {
+                    text = text.substring(start, end).trim();
+                    log('✅ 移除了 markdown 代码块标记');
+                }
+            } else if (text.includes('```')) {
+                const start = text.indexOf('```') + 3;
+                const end = text.indexOf('```', start);
+                if (end !== -1) {
+                    text = text.substring(start, end).trim();
+                    log('✅ 移除了代码块标记');
+                }
+            }
+            
+            // 检查开头
+            const trimmed = text.trim();
+            if (!trimmed.startsWith('<!DOCTYPE') && !trimmed.toLowerCase().startsWith('<html')) {
+                log('⚠️ 代码不是以 DOCTYPE 或 html 开头');
+                const htmlIndex = trimmed.toLowerCase().indexOf('<html');
+                if (htmlIndex !== -1) {
+                    text = '<!DOCTYPE html>\n' + trimmed.substring(htmlIndex);
+                    log('✅ 添加了 DOCTYPE 声明');
+                } else {
+                    text = '<!DOCTYPE html>\n<html>\n' + trimmed + '\n</html>';
+                    log('⚠️ 强制包装为 HTML');
+                }
+            } else {
+                log('✅ HTML 结构正确');
+            }
+            
+            return text;
+        }
+
+        async function generateGame() {
+            const prompt = document.getElementById('prompt').value.trim();
+            if (!prompt) {
+                alert('请输入游戏描述！');
+                return;
+            }
+
+            document.getElementById('gameFrame').style.display = 'none';
+            document.getElementById('codePreview').style.display = 'none';
+            document.getElementById('log').textContent = '';
+            
+            log('🚀 开始生成游戏...');
+            log('📝 提示词：' + prompt.substring(0, 100) + '...');
+
+            const fullPrompt = `请创建一个完整的 HTML5 游戏。
+
+游戏描述：${prompt}
+
+要求：
+1. 单个 HTML 文件，包含所有 CSS 和 JavaScript
+2. 使用 Canvas API 渲染
+3. 包含完整的游戏循环、玩家控制、碰撞检测
+4. 有得分系统和游戏结束判定
+5. 确保游戏有趣且可玩
+
+只返回纯 HTML 代码，不要有任何解释。`;
+
+            try {
+                log('📤 发送请求到 API...');
+                
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        model: 'claude-opus-4-6',
+                        messages: [
+                            {role: 'system', content: '你是一个专业的游戏开发 AI 助手。'},
+                            {role: 'user', content: fullPrompt}
+                        ],
+                        max_tokens: 8000,
+                        temperature: 0.7
+                    })
+                });
+
+                log('📥 API 响应状态：' + response.status);
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error('API 错误 (' + response.status + '): ' + errorText.substring(0, 200));
+                }
+
+                const result = await response.json();
+                log('✅ API 调用成功！');
+                log('📊 响应结构：' + JSON.stringify(Object.keys(result)));
+                
+                let gameCode = result.choices?.[0]?.message?.content;
+                
+                if (!gameCode) {
+                    log('❌ 错误：API 返回的数据中没有 game content');
+                    log('完整响应：' + JSON.stringify(result, null, 2));
+                    return;
+                }
+
+                log('🔧 处理游戏代码...');
+                gameCode = extractHtmlCode(gameCode);
+                currentGameCode = gameCode;
+                
+                log('📊 清理后代码长度：' + gameCode.length + ' 字符');
+                log('📄 代码开头 200 字符：\n' + gameCode.substring(0, 200));
+                
+                // 检查关键元素
+                if (gameCode.includes('<canvas')) {
+                    log('✅ 包含 canvas 元素');
+                } else {
+                    log('⚠️ 未找到 canvas 元素');
+                }
+                
+                if (gameCode.includes('<script')) {
+                    log('✅ 包含 script 标签');
+                } else {
+                    log('❌ 未找到 script 标签 - 游戏可能无法运行');
+                }
+                
+                if (gameCode.includes('requestAnimationFrame')) {
+                    log('✅ 使用 requestAnimationFrame 游戏循环');
+                } else if (gameCode.includes('setInterval')) {
+                    log('⚠️ 使用 setInterval 游戏循环（可能不够流畅）');
+                } else {
+                    log('⚠️ 未找到游戏循环');
+                }
+
+                // 显示代码预览
+                const previewEl = document.getElementById('codePreview');
+                previewEl.textContent = gameCode.substring(0, 2000) + '\n\n... (共 ' + gameCode.length + ' 字符)';
+                previewEl.style.display = 'block';
+                log('📄 代码预览已显示在下方');
+
+                // 加载游戏
+                log('🎮 加载游戏到 iframe...');
+                loadGame(gameCode);
+
+            } catch (error) {
+                log('❌ 生成失败：' + error.message);
+                console.error(error);
+            }
+        }
+
+        function loadGame(gameCode) {
+            const iframe = document.getElementById('gameFrame');
+            iframe.style.display = 'block';
+            iframe.srcdoc = gameCode;
+            
+            iframe.onload = () => {
+                log('✅ iframe 加载完成');
+                const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                log('📊 IFrame 文档大小：' + iframeDoc.documentElement.outerHTML.length + ' 字符');
+                
+                // 检查是否有错误
+                setTimeout(() => {
+                    const body = iframeDoc.body;
+                    if (body && body.innerHTML.length > 100) {
+                        log('✅ 游戏内容已加载');
+                    } else {
+                        log('❌ 游戏内容为空或太短');
+                    }
+                }, 1000);
+            };
+            
+            iframe.onerror = () => {
+                log('❌ iframe 加载失败');
+            };
+            
+            log('⏳ 等待游戏加载...');
+        }
+
+        function loadSavedGame() {
+            log('📂 尝试加载上次保存的游戏...');
+            
+            fetch('/api/last-saved')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.gameCode) {
+                        log('✅ 加载成功，代码长度：' + data.gameCode.length);
+                        currentGameCode = data.gameCode;
+                        loadGame(data.gameCode);
+                    } else {
+                        log('❌ 未找到保存的游戏');
+                    }
+                })
+                .catch(e => {
+                    log('❌ 加载失败：' + e.message);
+                    log('提示：先生成一个游戏，服务器会自动保存');
+                });
+        }
+
+        function loadDemo() {
+            log('🎮 加载本地 Demo...');
+            fetch('/game-demo.html')
+                .then(r => r.text())
+                .then(code => {
+                    log('✅ Demo 加载成功，代码长度：' + code.length);
+                    currentGameCode = code;
+                    loadGame(code);
+                })
+                .catch(e => {
+                    log('❌ Demo 加载失败：' + e.message);
+                });
+        }
+    </script>
+</body>
+</html>
