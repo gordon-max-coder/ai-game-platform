@@ -19,26 +19,28 @@
 }
 
 .create-workspace.create-mode .conversation-history {
-    max-width: 1200px;  /* 从 900px 增加到 1200px，占据约一半屏幕 */
+    width: 50vw;  /* 占据视口宽度的 50% */
+    max-width: 50%;  /* 最大占据父容器的 50% */
     margin: 0 auto;
     padding-left: 2rem;
     padding-right: 2rem;
 }
 
 .create-workspace.create-mode .conversation-input {
-    max-width: 1200px;  /* 从 900px 增加到 1200px */
+    width: 50vw;  /* 占据视口宽度的 50% */
+    max-width: 50%;  /* 最大占据父容器的 50% */
     margin: 0 auto;
     border-top: 1px solid #2d2d44;
 }
 
 /* 创建模式下，消息内容更宽 */
 .create-workspace.create-mode .message-content {
-    max-width: 90%;  /* 从 80% 增加到 90% */
+    max-width: 95%;  /* 几乎占满整个对话区域 */
 }
 
 /* 创建模式下，示例按钮区域更宽 */
 .create-workspace.create-mode .example-prompts {
-    max-width: 1000px;
+    width: 100%;
     margin: 0 auto;
 }
 
