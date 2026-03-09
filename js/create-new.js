@@ -193,7 +193,19 @@ async function generateGame() {
                 model: 'claude-opus-4-6',
                 messages: [
                     {role: 'system', content: '你是专业的游戏开发 AI 助手。'},
-                    {role: 'user', content: `请创建一个完整的 HTML5 游戏。游戏描述：${prompt}。要求：1.单个 HTML 文件 2.使用 Canvas API 3.包含完整游戏循环 4.有得分系统 5.确保有趣可玩。只返回 HTML 代码。`}
+                    {role: 'user', content: `请创建一个完整的 HTML5 游戏。游戏描述：${prompt}。
+                    
+重要技术要求：
+1. 单个 HTML 文件
+2. 使用 Canvas API
+3. Canvas 尺寸必须为 360x640 像素（9:16 竖屏比例）
+4. 在 JavaScript 中设置：canvas.width = 360; canvas.height = 640;
+5. 在 CSS 中设置：canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+6. 包含完整游戏循环
+7. 有得分系统
+8. 确保有趣可玩
+
+只返回 HTML 代码，不要其他说明。`}
                 ],
                 max_tokens: 16000,
                 temperature: 0.7
@@ -302,7 +314,10 @@ async function modifyGame() {
                 model: 'claude-opus-4-6',
                 messages: [
                     {role: 'system', content: '你是专业的游戏开发 AI 助手，擅长修改和优化游戏代码。'},
-                    {role: 'user', content: `请修改以下游戏代码。修改要求：${modifyText}。返回完整的 HTML 代码。`}
+                    {role: 'user', content: `请修改以下游戏代码。修改要求：${modifyText}。
+                    
+重要：保持 Canvas 尺寸为 360x640 像素（9:16 竖屏比例），不要改变。
+返回完整的 HTML 代码。`}
                 ],
                 max_tokens: 16000,
                 temperature: 0.7
