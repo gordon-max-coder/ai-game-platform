@@ -17,17 +17,10 @@ const elements = {};
 
 function init() {
     console.log('🎮 初始化创作页面...');
-    
-    // 缓存 DOM 元素
     cacheElements();
-    
-    // 绑定事件
     bindEvents();
     
-    // 检查是否从"我的游戏"编辑进入
     const loaded = loadGameFromURL();
-    
-    // 如果没有加载游戏，显示欢迎界面
     if (!loaded) {
         showWelcomeMessage();
     }
@@ -35,7 +28,6 @@ function init() {
     console.log('✅ 初始化完成，currentGameId:', currentGameId);
 }
 
-// 缓存 DOM 元素
 function cacheElements() {
     elements.promptInput = document.getElementById('promptInput');
     elements.sendBtn = document.getElementById('sendBtn');
@@ -50,7 +42,6 @@ function cacheElements() {
     elements.playBtn = document.getElementById('playBtn');
 }
 
-// 绑定事件
 function bindEvents() {
     elements.promptInput?.addEventListener('input', () => {
         elements.sendBtn.disabled = !elements.promptInput.value.trim();
@@ -80,16 +71,12 @@ function bindEvents() {
 
 // ==================== 游戏加载 ====================
 
-// 从 URL 加载游戏（从"我的游戏"编辑进入）
 function loadGameFromURL() {
     const params = new URLSearchParams(window.location.search);
     const gameId = params.get('edit');
     
-    if (!gameId || !window.GameStorage) {
-        return false;
-    }
+    if (!gameId || !window.GameStorage) return false;
     
-    // 通过 ID 查询游戏
     const games = GameStorage.getAllGames();
     const game = games.find(g => g.id === gameId);
     
@@ -98,61 +85,42 @@ function loadGameFromURL() {
         return false;
     }
     
-    // 设置当前游戏 ID（核心！）
     currentGameId = game.id;
     currentGameCode = game.code;
     currentVersion = game.version || 1;
     
-    console.log('✅ 加载游戏:', {
-        id: currentGameId,
-        title: game.title,
-        version: currentVersion
-    });
+    console.log('✅ 加载游戏:', { id: currentGameId, title: game.title, version: currentVersion });
     
-    // 显示游戏
     showGamePreview(game.code);
     showGameTitle(game.title);
-    
-    // 加载该 ID 的所有对话历史
     loadConversationHistory(currentGameId);
     
     return true;
 }
 
-// 加载指定 ID 的对话历史
 function loadConversationHistory(gameId) {
     if (!elements.conversationMessages) return;
     
     const history = GameStorage.getConversationHistory(gameId);
-    
     if (!history || history.length === 0) {
-        console.log('💬 无历史对话');
+        console.log('💡 无历史对话');
         return;
     }
     
-    // 清空并显示历史
     elements.conversationMessages.innerHTML = '';
-    
-    history.forEach(item => {
-        addMessageToUI(item.role, item.content, item.timestamp);
-    });
-    
-    console.log('💬 加载了', history.length, '条对话记录');
+    history.forEach(item => addMessageToUI(item.role, item.content, item.timestamp));
+    console.log('💡 加载了', history.length, '条对话记录');
 }
 
 // ==================== 游戏创建 ====================
 
-// 生成新游戏
 async function generateGame() {
     const prompt = elements.promptInput?.value.trim();
     if (!prompt) return;
     
-    // 添加用户消息（自动关联 currentGameId）
     addConversation('user', prompt);
-    
     elements.promptInput.value = '';
     elements.sendBtn.disabled = true;
-    
     showLoading();
     
     try {
@@ -186,9 +154,12 @@ async function generateGame() {
         
         showGamePreview(gameCode);
         
-        // 保存游戏（如果没有 ID 则创建新 ID）
-        saveGame(prompt);
+        if (window.GameAnalyzer) {
+            GameAnalyzer.analyze(gameCode, currentGameId);
+            GameAnalyzer.render('propertiesContent');
+        }
         
+        saveGame(prompt);
     } catch (error) {
         console.error('生成失败:', error);
         hideLoading();
@@ -197,18 +168,15 @@ async function generateGame() {
     }
 }
 
-// 保存游戏（基于 currentGameId）
 function saveGame(prompt) {
     if (!window.GameStorage) return;
     
-    // 如果没有 ID，生成新 ID（新游戏）
     if (!currentGameId) {
         currentGameId = 'game_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
         currentVersion = 1;
     }
     
     const gameTitle = extractGameTitle(prompt);
-    
     const gameData = {
         id: currentGameId,
         code: currentGameCode,
@@ -220,16 +188,13 @@ function saveGame(prompt) {
         updatedAt: new Date().toISOString()
     };
     
-    // 检查是否已存在
     const games = GameStorage.getAllGames();
     const existing = games.find(g => g.id === currentGameId);
     
     if (existing) {
-        // 更新现有游戏
         GameStorage.updateGame(currentGameId, gameData);
         console.log('💾 游戏已更新:', gameTitle, 'v' + currentVersion);
     } else {
-        // 创建新游戏
         gameData.createdAt = new Date().toISOString();
         GameStorage.saveGame(gameData);
         console.log('💾 游戏已创建:', gameTitle, 'ID:', currentGameId);
@@ -240,31 +205,25 @@ function saveGame(prompt) {
 
 // ==================== 游戏修改 ====================
 
-// 进入修改模式
 function enterModifyMode() {
     if (!currentGameId) {
         alert('请先创建或加载一个游戏');
         return;
     }
-    
     elements.modifyInputSection.style.display = 'block';
     elements.modifyInput.focus();
 }
 
-// 取消修改
 function cancelModify() {
     elements.modifyInputSection.style.display = 'none';
     elements.modifyInput.value = '';
 }
 
-// 修改游戏
 async function modifyGame() {
     const modifyText = elements.modifyInput?.value.trim();
     if (!modifyText || !currentGameCode || !currentGameId) return;
     
-    // 添加用户消息（关联 currentGameId）
     addConversation('user', '修改：' + modifyText);
-    
     elements.modifyInput.value = '';
     showLoading();
     
@@ -299,11 +258,13 @@ async function modifyGame() {
         
         showGamePreview(gameCode);
         
-        // 保存修改（基于 currentGameId）
+        if (window.GameAnalyzer) {
+            GameAnalyzer.analyze(gameCode, currentGameId);
+            GameAnalyzer.render('propertiesContent');
+        }
+        
         saveGame('修改：' + modifyText);
-        
         cancelModify();
-        
     } catch (error) {
         console.error('修改失败:', error);
         hideLoading();
@@ -313,24 +274,20 @@ async function modifyGame() {
 
 // ==================== 对话管理 ====================
 
-// 添加对话（自动关联 currentGameId）
 function addConversation(role, content) {
     if (!elements.conversationMessages) return;
-    
     addMessageToUI(role, content);
     
-    // 关键：只要有 currentGameId，就保存到该 ID 下
     if (currentGameId && window.GameStorage) {
         GameStorage.addConversation(currentGameId, {
             role: role,
             content: content,
             timestamp: new Date().toISOString()
         });
-        console.log('💬 对话已保存:', role, '→ ID:', currentGameId);
+        console.log('💡 对话已保存:', role, '→ ID:', currentGameId);
     }
 }
 
-// 显示消息到 UI（不保存）
 function addMessageToUI(role, content, timestamp) {
     if (!elements.conversationMessages) return;
     
@@ -341,7 +298,7 @@ function addMessageToUI(role, content, timestamp) {
         ? new Date(timestamp).toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'})
         : new Date().toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit'});
     
-    const icon = role === 'user' ? '👤' : (role === 'assistant' ? '🤖' : '💬');
+    const icon = role === 'user' ? '👤' : (role === 'assistant' ? '🤖' : '💡');
     const roleText = role === 'user' ? '你' : (role === 'assistant' ? 'AI' : '系统');
     
     messageDiv.innerHTML = `
@@ -355,12 +312,10 @@ function addMessageToUI(role, content, timestamp) {
     
     elements.conversationMessages.appendChild(messageDiv);
     
-    // 滚动到底部
     const container = document.getElementById('conversationHistory');
     if (container) container.scrollTop = container.scrollHeight;
 }
 
-// 显示加载动画
 function showLoading() {
     const loadingDiv = document.createElement('div');
     loadingDiv.className = 'message assistant loading-message';
@@ -372,13 +327,11 @@ function showLoading() {
     elements.conversationMessages?.appendChild(loadingDiv);
 }
 
-// 隐藏加载动画
 function hideLoading() {
     const loadingMessage = document.getElementById('loadingMessage');
     if (loadingMessage) loadingMessage.remove();
 }
 
-// 显示欢迎消息
 function showWelcomeMessage() {
     if (!elements.conversationMessages) return;
     
@@ -390,7 +343,7 @@ function showWelcomeMessage() {
                 <button class="prompt-chip" data-prompt="创建一个太空射击游戏">🚀 太空射击</button>
                 <button class="prompt-chip" data-prompt="创建一个贪食蛇游戏">🐍 贪食蛇</button>
                 <button class="prompt-chip" data-prompt="创建一个平台跳跃游戏">🏃 平台跳跃</button>
-                <button class="prompt-chip" data-prompt="创建一个打砖块游戏">🧱 打砖块</button>
+                <button class="prompt-chip" data-prompt="创建一个打砖块游戏">🏐 打砖块</button>
             </div>
         </div>
     `;
@@ -445,13 +398,13 @@ function playGame() {
 }
 
 function extractHtmlCode(text) {
-    if (text.includes('```html')) {
-        const start = text.indexOf('```html') + 7;
-        const end = text.indexOf('```', start);
+    if (text.includes('###')) {
+        const start = text.indexOf('###') + 3;
+        const end = text.indexOf('###', start);
         if (end !== -1) text = text.substring(start, end).trim();
-    } else if (text.includes('```')) {
-        const start = text.indexOf('```') + 3;
-        const end = text.indexOf('```', start);
+    } else if (text.includes('###')) {
+        const start = text.indexOf('###') + 3;
+        const end = text.indexOf('###', start);
         if (end !== -1) text = text.substring(start, end).trim();
     }
     

@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="css/create-layout.css">
 </head>
 <body>
-    <!-- 顶部导航栏 -->
+    <!-- 顶部导航 -->
     <header class="top-navbar">
         <a href="index.html" class="navbar-brand">
             <img src="images/logo.svg" alt="Logo" onerror="this.style.display='none'">
@@ -23,7 +23,7 @@
         </div>
     </header>
 
-    <!-- 页面包装器 -->
+    <!-- 页面容器 -->
     <div class="page-wrapper">
         <!-- 左侧工具栏 -->
         <aside class="sidebar">
@@ -41,7 +41,7 @@
                     <span>游戏库</span>
                 </a>
                 <a href="my-games.html">
-                    <span class="icon">🎯</span>
+                    <span class="icon">📁</span>
                     <span>我的游戏</span>
                 </a>
                 <a href="learn.html">
@@ -62,12 +62,12 @@
             </div>
         </aside>
 
-        <!-- 主内容区 - 6:4 分栏 -->
+        <!-- 主内容区 - 三栏布局 1:1:1 -->
         <div class="main-wrapper">
             <main class="create-workspace">
-                <!-- 左侧 60% - 对话区 -->
+                <!-- 左侧 - 对话区 -->
                 <div class="conversation-section">
-                    <!-- 对话记录区（4/5） -->
+                    <!-- 对话记录区 -->
                     <div class="conversation-history" id="conversationHistory">
                         <div class="conversation-messages" id="conversationMessages">
                             <div class="welcome-message">
@@ -75,15 +75,15 @@
                                 <p>描述你想要的游戏，AI 会帮你实现</p>
                                 <div class="example-prompts">
                                     <button class="prompt-chip" data-prompt="创建一个太空射击游戏，玩家控制飞船躲避陨石并消灭敌人">🚀 太空射击</button>
-                                    <button class="prompt-chip" data-prompt="创建一个贪食蛇游戏，蛇吃食物变长，撞到墙壁或自己就游戏结束">🐍 贪食蛇</button>
+                                    <button class="prompt-chip" data-prompt="创建一个贪食蛇游戏，蛇吃食物变长，撞到墙或自己就游戏结束">🐍 贪食蛇</button>
                                     <button class="prompt-chip" data-prompt="创建一个平台跳跃游戏，玩家跳跃躲避障碍物收集金币">🏃 平台跳跃</button>
-                                    <button class="prompt-chip" data-prompt="创建一个打砖块游戏，用球拍反弹球击碎砖块">🧱 打砖块</button>
+                                    <button class="prompt-chip" data-prompt="创建一个打砖块游戏，用球拍反弹球击碎砖块">🏐 打砖块</button>
                                 </div>
                             </div>
                         </div>
                     </div>
 
-                    <!-- 输入区（1/5） -->
+                    <!-- 输入区 -->
                     <div class="conversation-input">
                         <div class="input-wrapper">
                             <textarea 
@@ -93,7 +93,7 @@
                                 rows="3"
                             ></textarea>
                             <button class="btn-send" id="sendBtn" disabled>
-                                <span>✨</span>
+                                <span>🚀</span>
                                 <span>生成</span>
                             </button>
                         </div>
@@ -103,7 +103,7 @@
                     </div>
                 </div>
 
-                <!-- 右侧 40% - 游戏展示区 -->
+                <!-- 中间 - 游戏预览区 -->
                 <div class="preview-section">
                     <div class="preview-header">
                         <h3>🎯 游戏预览</h3>
@@ -115,7 +115,7 @@
                     
                     <div class="preview-content" id="previewContent">
                         <div class="preview-placeholder">
-                            <div class="placeholder-icon">🎮</div>
+                            <div class="placeholder-icon">🎨</div>
                             <p>游戏生成后会在这里显示</p>
                         </div>
                         <iframe class="game-frame" id="gameFrame" style="display: none;"></iframe>
@@ -135,6 +135,19 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- 右侧 - 数值面板 -->
+                <div class="properties-section">
+                    <div class="properties-header">
+                        <h3>⚙️ 游戏参数</h3>
+                    </div>
+                    <div class="properties-content" id="propertiesContent">
+                        <div class="no-properties">
+                            <div class="no-properties-icon">🎮</div>
+                            <p>生成游戏后<br>关键数值会显示在这里</p>
+                        </div>
+                    </div>
+                </div>
             </main>
         </div>
     </div>
@@ -144,6 +157,7 @@
     <script src="js/auth.js"></script>
     <script src="js/navbar.js"></script>
     <script src="js/user-state.js"></script>
+    <script src="js/game-analyzer.js"></script>
     <script src="js/create-new.js"></script>
 </body>
 </html>
