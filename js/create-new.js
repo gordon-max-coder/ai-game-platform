@@ -20,12 +20,54 @@ function init() {
     cacheElements();
     bindEvents();
     
-    const loaded = loadGameFromURL();
+    // 1. 先尝试从 URL 加载
+    let loaded = loadGameFromURL();
+    
+    // 2. 如果 URL 没有，尝试从 sessionStorage 恢复（页面刷新场景）
+    if (!loaded) {
+        loaded = recoverFromSessionStorage();
+    }
+    
+    // 3. 如果都没有，显示欢迎界面
     if (!loaded) {
         showWelcomeMessage();
     }
     
     console.log('✅ 初始化完成，currentGameId:', currentGameId);
+}
+
+// 从 sessionStorage 恢复状态（页面刷新）
+function recoverFromSessionStorage() {
+    const savedGameId = sessionStorage.getItem('currentGameId');
+    const savedGameCode = sessionStorage.getItem('currentGameCode');
+    const savedVersion = sessionStorage.getItem('currentVersion');
+    
+    if (!savedGameId || !savedGameCode) {
+        return false;
+    }
+    
+    console.log('🔄 从 sessionStorage 恢复:', savedGameId);
+    
+    currentGameId = savedGameId;
+    currentGameCode = savedGameCode;
+    currentVersion = parseInt(savedVersion) || 1;
+    
+    // 显示游戏
+    showGamePreview(currentGameCode);
+    
+    // 加载对话历史
+    loadConversationHistory(currentGameId);
+    
+    // 分析游戏参数
+    if (window.GameAnalyzer) {
+        GameAnalyzer.analyze(currentGameCode, currentGameId);
+        GameAnalyzer.render('propertiesContent');
+    }
+    
+    // 更新 URL
+    updateURLWithGameId(currentGameId);
+    
+    return true;
 }
 
 function cacheElements() {
@@ -67,6 +109,9 @@ function bindEvents() {
     
     elements.modifySendBtn?.addEventListener('click', modifyGame);
     elements.cancelModifyBtn?.addEventListener('click', cancelModify);
+    
+    // 监听页面刷新/关闭，保存状态
+    window.addEventListener('beforeunload', savePageState);
 }
 
 // ==================== 游戏加载 ====================
@@ -95,7 +140,24 @@ function loadGameFromURL() {
     showGameTitle(game.title);
     loadConversationHistory(currentGameId);
     
+    // 分析游戏参数
+    if (window.GameAnalyzer) {
+        GameAnalyzer.analyze(game.code, currentGameId);
+        GameAnalyzer.render('propertiesContent');
+    }
+    
+    // 更新 URL（确保刷新后仍然保留）
+    updateURLWithGameId(currentGameId);
+    
     return true;
+}
+
+// 更新 URL 中的游戏 ID
+function updateURLWithGameId(gameId) {
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.set('edit', gameId);
+    window.history.replaceState({ gameId: gameId }, '', newUrl.toString());
+    console.log('🔗 URL 已更新:', newUrl.toString());
 }
 
 function loadConversationHistory(gameId) {
@@ -160,6 +222,11 @@ async function generateGame() {
         }
         
         saveGame(prompt);
+        
+        // 更新 URL
+        if (currentGameId) {
+            updateURLWithGameId(currentGameId);
+        }
     } catch (error) {
         console.error('生成失败:', error);
         hideLoading();
@@ -398,13 +465,13 @@ function playGame() {
 }
 
 function extractHtmlCode(text) {
-    if (text.includes('###')) {
-        const start = text.indexOf('###') + 3;
-        const end = text.indexOf('###', start);
+    if (text.includes('```html')) {
+        const start = text.indexOf('```html') + 7;
+        const end = text.indexOf('```', start);
         if (end !== -1) text = text.substring(start, end).trim();
-    } else if (text.includes('###')) {
-        const start = text.indexOf('###') + 3;
-        const end = text.indexOf('###', start);
+    } else if (text.includes('```')) {
+        const start = text.indexOf('```') + 3;
+        const end = text.indexOf('```', start);
         if (end !== -1) text = text.substring(start, end).trim();
     }
     
@@ -446,6 +513,16 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// 保存页面状态（用于刷新后恢复）
+function savePageState() {
+    if (currentGameId) {
+        sessionStorage.setItem('currentGameId', currentGameId);
+        sessionStorage.setItem('currentGameCode', currentGameCode);
+        sessionStorage.setItem('currentVersion', currentVersion);
+        console.log('💾 页面状态已保存');
+    }
 }
 
 // ==================== 启动 ====================

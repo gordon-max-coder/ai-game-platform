@@ -64,7 +64,7 @@ http.createServer((req, res) => {
                         'Authorization': `Bearer ${API_KEY}`,
                         'Content-Length': Buffer.byteLength(apiData)
                     },
-                    timeout: 120000  // 增加到 120 秒
+                    timeout: 300000  // 增加到 120 秒
                 };
 
                 const startTime = Date.now();
