@@ -1,14 +1,25 @@
-# 自动生成的文件
+# 环境变量 - 包含敏感信息
+.env
+
+# 依赖包
 node_modules/
+
+# 日志文件
 *.log
+npm-debug.log*
+
+# 操作系统文件
 .DS_Store
 Thumbs.db
 
-# 临时文件
-*.tmp
-*.bak
-*.swp
+# 截图和临时文件
+*.png
+*.jpg
+*.jpeg
+!images/*.png
+!images/*.jpg
+!images/*.svg
 
-# 日志文件
-server.log
-*.log
+# 备份文件
+*.bak
+*.backup
