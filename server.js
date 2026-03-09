@@ -35,6 +35,8 @@ http.createServer((req, res) => {
     // API 代理 - 生成游戏
     if (req.url === '/api/generate' && req.method === 'POST') {
         let body = '';
+        let responseSent = false;  // 标记响应是否已发送
+        
         req.on('data', chunk => body += chunk);
         req.on('end', () => {
             console.log(`  📝 收到请求 (${body.length} bytes)`);
@@ -62,7 +64,7 @@ http.createServer((req, res) => {
                         'Authorization': `Bearer ${API_KEY}`,
                         'Content-Length': Buffer.byteLength(apiData)
                     },
-                    timeout: 60000
+                    timeout: 120000  // 增加到 120 秒
                 };
 
                 const startTime = Date.now();
@@ -73,6 +75,9 @@ http.createServer((req, res) => {
                     let apiResponse = '';
                     proxyRes.on('data', chunk => apiResponse += chunk);
                     proxyRes.on('end', () => {
+                        if (responseSent) return;
+                        responseSent = true;
+                        
                         if (proxyRes.statusCode === 200) {
                             console.log(`  ✅ 成功！响应大小：${apiResponse.length} bytes`);
                         } else {
@@ -86,6 +91,9 @@ http.createServer((req, res) => {
                 });
 
                 proxyReq.on('error', (e) => {
+                    if (responseSent) return;
+                    responseSent = true;
+                    
                     console.error(`  ❌ 代理错误：${e.message} (${e.code})`);
                     res.writeHead(502, {'Content-Type': 'application/json'});
                     res.end(JSON.stringify({
@@ -96,12 +104,15 @@ http.createServer((req, res) => {
                 });
 
                 proxyReq.on('timeout', () => {
-                    console.error(`  ⏱️ 请求超时`);
+                    if (responseSent) return;
+                    responseSent = true;
+                    
+                    console.error(`  ⏱️ 请求超时 (${Date.now() - startTime}ms)`);
                     proxyReq.destroy();
                     res.writeHead(504, {'Content-Type': 'application/json'});
                     res.end(JSON.stringify({
                         error: 'API 请求超时',
-                        message: '服务器响应时间过长',
+                        message: '服务器响应时间过长，请重试或检查网络连接',
                         duration: Date.now() - startTime
                     }));
                 });
@@ -111,6 +122,9 @@ http.createServer((req, res) => {
                 console.log(`  → 请求已发送`);
                 
             } catch (e) {
+                if (responseSent) return;
+                responseSent = true;
+                
                 console.error(`  ❌ 解析错误：${e.message}`);
                 res.writeHead(400, {'Content-Type': 'application/json'});
                 res.end(JSON.stringify({error: e.message}));
