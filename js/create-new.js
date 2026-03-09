@@ -32,9 +32,11 @@ function init() {
     if (loaded) {
         // 编辑模式：显示三栏布局
         setLayoutMode('edit');
+        updateNavActive('edit');
     } else {
         // 创建模式：只显示左侧对话区，全屏
         setLayoutMode('create');
+        updateNavActive('create');
         showWelcomeMessage();
     }
     
@@ -619,7 +621,7 @@ function savePageState() {
 }
 
 // 清除游戏会话（点击"创建"按钮时调用）
-window.clearGameSession = function() {
+window.handleCreateClick = function() {
     // 清除 sessionStorage
     sessionStorage.removeItem('currentGameId');
     sessionStorage.removeItem('currentGameCode');
@@ -635,11 +637,38 @@ window.clearGameSession = function() {
     newUrl.searchParams.delete('edit');
     window.history.replaceState({}, '', newUrl.toString());
     
-    console.log('🧹 游戏会话已清除，切换到创建模式');
+    // 清除对话历史 UI
+    if (elements.conversationMessages) {
+        elements.conversationMessages.innerHTML = '';
+    }
     
-    // 让页面正常跳转（不阻止默认行为）
-    return true;
+    // 隐藏预览区和参数区
+    setLayoutMode('create');
+    
+    // 显示欢迎界面
+    showWelcomeMessage();
+    
+    // 更新导航 active 状态
+    updateNavActive('create');
+    
+    console.log('✨ 已切换到创建模式');
 };
+
+// 更新导航 active 状态
+function updateNavActive(page) {
+    const navLinks = document.querySelectorAll('.sidebar-nav a');
+    navLinks.forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    const activeLink = document.querySelector('.nav-create');
+    if (activeLink) {
+        activeLink.classList.add('active');
+    }
+}
+
+// 清除游戏会话（兼容旧版本）
+window.clearGameSession = window.handleCreateClick;
 
 // ==================== 启动 ====================
 
