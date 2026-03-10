@@ -137,6 +137,7 @@ function bindEvents() {
     
     elements.sendBtn?.addEventListener('click', generateGame);
     elements.playBtn?.addEventListener('click', playGame);
+    document.getElementById('codeBtn')?.addEventListener('click', showCode);
     document.getElementById('modifyBtn')?.addEventListener('click', enterModifyMode);
     
     elements.modifyInput?.addEventListener('keydown', (e) => {
