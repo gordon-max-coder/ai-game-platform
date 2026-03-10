@@ -1,4 +1,4 @@
-// 学习中心页面脚本
+﻿// 学习中心页面脚本
 
 // FAQ 折叠功能
 const faqItems = document.querySelectorAll('.faq-item');

@@ -1,4 +1,4 @@
-# 🎮 GameAI - AI 游戏生成平台
+﻿# 🎮 GameAI - AI 游戏生成平台
 
 使用 AI 自动生成 HTML5 游戏，无需编程经验！
 

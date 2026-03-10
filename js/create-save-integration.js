@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 在 create.html 底部添加此脚本引用
  * 在 </body> 标签前添加：
  * <script src="js/game-storage.js"></script>

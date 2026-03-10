@@ -1,4 +1,4 @@
-// 主 JavaScript 文件
+﻿// 主 JavaScript 文件
 
 // 导航栏滚动效果
 window.addEventListener('scroll', () => {

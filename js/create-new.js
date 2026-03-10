@@ -1,4 +1,4 @@
-/**
+﻿/**
  * GameAI - 创作页面逻辑（游戏 ID 核心架构）
  * 所有操作都基于 currentGameId
  */

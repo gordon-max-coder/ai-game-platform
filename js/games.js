@@ -1,4 +1,4 @@
-// 游戏库页面脚本
+﻿// 游戏库页面脚本
 
 // 筛选功能
 const filterBtns = document.querySelectorAll('.filter-btn');
