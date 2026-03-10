@@ -1,0 +1,28 @@
+* text=auto eol=LF working-tree-encoding=UTF-8
+
+# Web 文件
+*.html text eol=LF working-tree-encoding=UTF-8
+*.css text eol=LF working-tree-encoding=UTF-8
+*.js text eol=LF working-tree-encoding=UTF-8
+*.json text eol=LF working-tree-encoding=UTF-8
+
+# 文档
+*.md text eol=LF working-tree-encoding=UTF-8
+*.txt text eol=LF working-tree-encoding=UTF-8
+
+# 批处理文件（Windows 使用 CRLF）
+*.bat text eol=CRLF working-tree-encoding=UTF-8
+*.cmd text eol=CRLF working-tree-encoding=UTF-8
+*.ps1 text eol=LF working-tree-encoding=UTF-8
+
+# 二进制文件
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.svg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary

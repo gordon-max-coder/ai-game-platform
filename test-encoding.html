@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test create.html</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f0f0f0; }
+        .test-box { background: white; padding: 20px; border-radius: 8px; margin: 10px 0; }
+        .good { color: green; }
+        .bad { color: red; }
+        iframe { width: 100%; height: 600px; border: 2px solid #333; }
+    </style>
+</head>
+<body>
+    <h1>🧪 create.html 编码测试</h1>
+    
+    <div class="test-box">
+        <h2>测试 1: 直接读取文件内容</h2>
+        <div id="fileContent"></div>
+    </div>
+    
+    <div class="test-box">
+        <h2>测试 2: 在 iframe 中显示</h2>
+        <iframe id="testFrame"></iframe>
+    </div>
+    
+    <div class="test-box">
+        <h2>测试结果</h2>
+        <div id="result"></div>
+    </div>
+    
+    <script>
+        // 测试 1: 读取文件
+        fetch('create.html?t=' + Date.now())
+            .then(r => r.text())
+            .then(text => {
+                const titleMatch = text.match(/<title>(.*?)<\/title>/);
+                const title = titleMatch ? titleMatch[1] : 'Not found';
+                
+                document.getElementById('fileContent').innerHTML = 
+                    '<p>文件标题：<strong>' + title + '</strong></p>' +
+                    '<p>前 200 字符：<pre>' + text.substring(0, 200) + '</pre></p>';
+                
+                // 检查是否乱码
+                if (title.includes('鍒') || title.includes('缓') || title.includes('娓')) {
+                    document.getElementById('result').innerHTML = 
+                        '<p class="bad">❌ 文件仍有编码问题！标题显示为乱码。</p>' +
+                        '<p>应该是："创建游戏 - GameAI"</p>' +
+                        '<p>实际是："' + title + '"</p>';
+                } else if (title.includes('创建游戏')) {
+                    document.getElementById('result').innerHTML = 
+                        '<p class="good">✅ 文件编码正常！标题显示正确。</p>';
+                } else {
+                    document.getElementById('result').innerHTML = 
+                        '<p>⚠️ 无法判断，请手动检查</p>';
+                }
+            })
+            .catch(e => {
+                document.getElementById('fileContent').innerHTML = 
+                    '<p class="bad">读取失败：' + e.message + '</p>';
+            });
+        
+        // 测试 2: iframe 加载
+        document.getElementById('testFrame').src = 'create.html?t=' + Date.now();
+    </script>
+</body>
+</html>
