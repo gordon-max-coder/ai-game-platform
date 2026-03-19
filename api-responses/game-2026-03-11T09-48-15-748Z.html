@@ -1,0 +1,141 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>贪食蛇游戏</title>
+    <style>
+        canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 360;
+        canvas.height = 640;
+
+        let snake = [
+            {x: 180, y: 320},
+            {x: 170, y: 320},
+            {x: 160, y: 320}
+        ];
+        let direction = 'right';
+        let food = null;
+        let score = 0;
+        let gameOver = false;
+
+        function drawSnake() {
+            snake.forEach((part, index) => {
+                ctx.fillStyle = index === 0 ? 'green' : 'lime';
+                ctx.fillRect(part.x, part.y, 10, 10);
+            });
+        }
+
+        function drawFood() {
+            if (food) {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(food.x, food.y, 10, 10);
+            }
+        }
+
+        function generateFood() {
+            let x = Math.floor(Math.random() * 36) * 10;
+            let y = Math.floor(Math.random() * 64) * 10;
+            food = {x, y};
+            if (snake.some(part => part.x === x && part.y === y)) {
+                generateFood();
+            }
+        }
+
+        function updateSnake() {
+            let head = snake[0];
+            let newHead;
+            switch (direction) {
+                case 'right':
+                    newHead = {x: head.x + 10, y: head.y};
+                    break;
+                case 'left':
+                    newHead = {x: head.x - 10, y: head.y};
+                    break;
+                case 'up':
+                    newHead = {x: head.x, y: head.y - 10};
+                    break;
+                case 'down':
+                    newHead = {x: head.x, y: head.y + 10};
+                    break;
+            }
+            snake.unshift(newHead);
+            if (newHead.x === food.x && newHead.y === food.y) {
+                score++;
+                generateFood();
+            } else {
+                snake.pop();
+            }
+            if (newHead.x < 0 || newHead.x >= 360 || newHead.y < 0 || newHead.y >= 640 || snake.slice(1).some(part => part.x === newHead.x && part.y === newHead.y)) {
+                gameOver = true;
+            }
+        }
+
+        function drawScore() {
+            ctx.fillStyle = 'black';
+            ctx.font = '24px Arial';
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'top';
+            ctx.fillText(`得分: ${score}`, 10, 10);
+        }
+
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, 360, 640);
+            ctx.fillStyle = 'white';
+            ctx.font = '48px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('游戏结束', 180, 320);
+            ctx.font = '24px Arial';
+            ctx.fillText(`最终得分: ${score}`, 180, 360);
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, 360, 640);
+            if (!gameOver) {
+                updateSnake();
+                drawSnake();
+                drawFood();
+                drawScore();
+            } else {
+                drawGameOver();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+
+        document.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp':
+                    if (direction !== 'down') direction = 'up';
+                    break;
+                case 'ArrowDown':
+                    if (direction !== 'up') direction = 'down';
+                    break;
+                case 'ArrowLeft':
+                    if (direction !== 'right') direction = 'left';
+                    break;
+                case 'ArrowRight':
+                    if (direction !== 'left') direction = 'right';
+                    break;
+            }
+        });
+
+        generateFood();
+        gameLoop();
+    </script>
+</body>
+</html>

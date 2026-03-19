@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>太空小行星</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Press Start 2P', cursive; /* 尝试使用像素字体 */
+        }
+        @font-face {
+            font-family: 'Press Start 2P';
+            src: url('https://fonts.gstatic.com/s/pressstart2p/v15/8mik-FUtRFzYQaJxLtkUDq0E_YjZ-q8G.woff2') format('woff2');
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            background-color: #000;
+            border: 2px solid #fff;
+        }
+        #game-container {
+            position: relative;
+            width: 360px; /* 与 canvas 宽度相同 */
+            height: 640px; /* 与 canvas 高度相同 */
+            overflow: hidden;
+        }
+        #start-screen, #game-over-screen, #level-complete-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+            font-size: 1.2em;
+            z-index: 10;
+            line-height: 1.5;
+        }
+        #start-screen button, #game-over-screen button, #level-complete-screen button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 1em;
+            margin-top: 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            font-family: 'Press Start 2P', cursive;
+        }
+        #start-screen button:hover, #game-over-screen button:hover, #level-complete-screen button:hover {
+            background-color: #0056b3;
+        }
+        .hidden {
+            display: none !important;
+        }
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-size: 1em;
+            z-index: 5;
+            font-family: 'Press Start 2P', cursive;
+        }
+        #level-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #fff;
+            font-size: 1em;
+            z-index: 5;
+            font-family: 'Press Start 2P', cursive;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="start-screen">
+            <h1>太空小行星</h1>
+            <p>使用鼠标或触摸控制飞船移动</p>
+            <p>躲避小行星，收集分数！</p>
+            <button id="startButton">开始游戏</button>
+        </div>
+
+        <div id="level-complete-screen" class="hidden">
+            <h1>关卡完成！</h1>
+            <p>你已成功通过当前关卡！</p>
+            <p>得分: <span id="level-complete-score">0</span></p>
+            <button id="nextLevelButton">进入下一关</button>
+        </div>
+
+        <div id="game-over-screen" class="hidden">
+            <h1>游戏结束！</h1>
+            <p>你的飞船被摧毁了！</p>
+            <p>最终得分: <span id="final-score">0</span></p>
+            <button id="restartButton">重新开始</button>
+        </div>
+
+        <div id="score-display">得分: <span id="current-score">0</span></div>
+        <div id="level-display">关卡: <span id="current-level">1</span></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 设置 Canvas 尺寸
+        canvas.width = 360;
+        canvas.height = 640;
+
+        // 游戏状态
+        let gameState = 'start'; // 'start', 'playing', 'level_complete', 'game_over'
+        let score = 0;
+        let level = 1;
+        let lastTime = 0;
+        let deltaTime = 0;
+
+        // 玩家飞船
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height - 60,
+            width: 40,
+            height: 40,
+            speed: 200, // 像素/秒
+            color: '#00ff00',
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.moveTo(this.x, this.y - this.height / 2);
+                ctx.lineTo(this.x + this.width / 2, this.y + this.height / 2);
+                ctx.lineTo(this.x - this.width / 2, this.y + this.height / 2);
+                ctx.closePath();
+                ctx.fill();
+            }
+        };
+
+        // 小行星
+        let asteroids = [];
+        const asteroidMinSpeed = 50; // 像素/秒
+        const asteroidMaxSpeed = 150; // 像素/秒
+        const asteroidMinSize = 15;
+        const asteroidMaxSize = 30;
+        const asteroidSpawnInterval = 1; // 秒
+        let timeSinceLastAsteroid = 0;
+
+        // 星星背景
+        const stars = [];
+        const numStars = 100;
+
+        function initStars() {
+            for (let i = 0; i < numStars; i++) {
+                stars.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    size: Math.random() * 2 + 0.5,
+                    speed: Math.random() * 50 + 20 // 像素/秒
+                });
+            }
+        }
+
+        function drawStars() {
+            ctx.fillStyle = '#fff';
+            stars.forEach(star => {
+                ctx.fillRect(star.x, star.y, star.size, star.size);
+            });
+        }
+
+        function updateStars(dt) {
+            stars.forEach(star => {
+                star.y += star.speed * dt;
+                if (star.y > canvas.height) {
+                    star.y = 0;
+                    star.x = Math.random() * canvas.width;
+                }
+            });
+        }
+
+        function spawnAsteroid() {
+            const size = Math.random() * (asteroidMaxSize - asteroidMinSize) + asteroidMinSize;
+            asteroids.push({
+                x: Math.random() * (canvas.width - size),
+                y: -size, // 从屏幕上方生成
+                radius: size / 2,
+                speed: Math.random() * (asteroidMaxSpeed - asteroidMinSpeed) + asteroidMinSpeed,
+                color: '#888',
+                rotation: Math.random() * Math.PI * 2,
+                rotationSpeed: (Math.random() - 0.5) * 2 // -1 到 1 弧度/秒
+            });
+        }
+
+        function updateAsteroids(dt) {
+            asteroids.forEach(asteroid => {
+                asteroid.y += asteroid.speed * dt;
+                asteroid.rotation += asteroid.rotationSpeed * dt;
+            });
+
+            // 移除超出屏幕的小行星并增加分数
+            asteroids = asteroids.filter(asteroid => {
+                if (asteroid.y - asteroid.radius > canvas.height) {
+                    score += 10; // 每躲过一个小行星加10���
+                    return false; // 移除
+                }
+                return true;
+            });
+
+            // 根据关卡增加小行星生成频率和速度
+            let currentAsteroidSpawnInterval = asteroidSpawnInterval / (1 + (level - 1) * 0.2);
+            let currentAsteroidMaxSpeed = asteroidMaxSpeed * (1 + (level - 1) * 0.1);
+
+            timeSinceLastAsteroid += dt;
+            if (timeSinceLastAsteroid >= currentAsteroidSpawnInterval) {
+                spawnAsteroid();
+                timeSinceLastAsteroid = 0;
+            }
+        }
+
+        function drawAsteroids() {
+            asteroids.forEach(asteroid => {
+                ctx.save();
+                ctx.translate(asteroid.x + asteroid.radius, asteroid.y + asteroid.radius);
+                ctx.rotate(asteroid.rotation);
+                ctx.fillStyle = asteroid.color;
+                ctx.beginPath();
+                ctx.arc(0, 0, asteroid.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            });
+        }
+
+        function checkCollision() {
+            const playerCollisionRadius = player.width / 3; // 缩小碰撞检测区域
+            return asteroids.some(asteroid => {
+                const dx = (player.x) - (asteroid.x + asteroid.radius);
+                const dy = (player.y) - (asteroid.y + asteroid.radius);
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                // 简单的圆形碰撞检测
+                return distance < playerCollisionRadius + asteroid.radius;
+            });
+        }
+
+        function resetGame() {
+            score = 0;
+            level = 1;
+            player.x = canvas.width / 2;
+            player.y = canvas.height - 60;
+            asteroids = [];
+            timeSinceLastAsteroid = 0;
+            gameState = 'playing';
+            updateScoreDisplay();
+            updateLevelDisplay();
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('level-complete-screen').classList.add('hidden');
+        }
+
+        function gameOver() {
+            gameState = 'game_over';
+            document.getElementById('final-score').textContent = score;
+            document.getElementById('game-over-screen').classList.remove('hidden');
+        }
+
+        function levelComplete() {
+            gameState = 'level_complete';
+            document.getElementById('level-complete-score').textContent = score;
+            document.getElementById('level-complete-screen').classList.remove('hidden');
+        }
+
+        function nextLevel() {
+            level++;
+            asteroids = []; // 清空当前关卡的小行星
+            timeSinceLastAsteroid = 0;
+            gameState = 'playing';
+            updateLevelDisplay();
+            document.getElementById('level-complete-screen').classList.add('hidden');
+        }
+
+        function updateScoreDisplay() {
+            document.getElementById('current-score').textContent = score;
+        }
+
+        function updateLevelDisplay() {
+            document.getElementById('current-level').textContent = level;
+        }
+
+        // 游戏循环
+        function gameLoop(currentTime) {
+            requestAnimationFrame(gameLoop);
+
+            deltaTime = (currentTime - lastTime) / 1000; // 转换为秒
+            lastTime = currentTime;
+
+            if (gameState === 'playing') {
+                // 清除画布
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+                // 更新和绘制背景星星
+                updateStars(deltaTime);
+                drawStars();
+
+                // 更新和绘制小行星
+                updateAsteroids(deltaTime);
+                drawAsteroids();
+
+                // 绘制玩家
+                player.draw();
+
+                // 碰撞检测
+                if (checkCollision()) {
+                    gameOver();
+                }
+
+                // 关卡胜利条件
+                // 假设每达到一定分数进入下一关
+                const scoreToNextLevel = 500 * level; // 例如，第一关500分，第二关1000分
+                if (score >= scoreToNextLevel && asteroids.length === 0) { // 并且当前屏幕没有小行星
+                    levelComplete();
+                }
+
+                updateScoreDisplay();
+
+            } else if (gameState === 'start') {
+                // 显示开始界面
+                document.getElementById('start-screen').classList.remove('hidden');
+            }
+        }
+
+        // 鼠标/触摸控制
+        canvas.addEventListener('mousemove', (e) => {
+            if (gameState === 'playing') {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width; // 计算缩放比例
+                player.x = (e.clientX - rect.left) * scaleX;
+                // 限制玩家移动范围
+                if (player.x < player.width / 2) player.x = player.width / 2;
+                if (player.x > canvas.width - player.width / 2) player.x = canvas.width - player.width / 2;
+            }
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            if (gameState === 'playing' && e.touches.length > 0) {
+                e.preventDefault(); // 阻止滚动
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                player.x = (e.touches[0].clientX - rect.left) * scaleX;
+                // 限制玩家移动范围
+                if (player.x < player.width / 2) player.x = player.width / 2;
+                if (player.x > canvas.width - player.width / 2) player.x = canvas.width - player.width / 2;
+            }
+        }, { passive: false }); // passive: false 允许阻止默认行为
+
+        // 事件监听器
+        document.getElementById('startButton').addEventListener('click', resetGame);
+        document.getElementById('restartButton').addEventListener('click', resetGame);
+        document.getElementById('nextLevelButton').addEventListener('click', nextLevel);
+
+        // 初始化
+        initStars();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

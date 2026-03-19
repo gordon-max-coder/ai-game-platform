@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>太空小队</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a2e;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Arial', sans-serif;
+            color: #fff;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            background-color: #000;
+            border: 2px solid #00f;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.7);
+        }
+        #game-container {
+            position: relative;
+        }
+        #start-screen, #game-over-screen, #level-complete-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            font-size: 24px;
+            text-align: center;
+            z-index: 100;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 20px;
+            background-color: #00f;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #00a;
+        }
+        h1 {
+            color: #0ff;
+            text-shadow: 0 0 10px #0ff;
+        }
+        p {
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        <div id="start-screen">
+            <h1>太空小队</h1>
+            <p>保卫地球免受外星入侵！</p>
+            <p>使用鼠标或触摸屏移动，自动射击。</p>
+            <button id="startButton">开始游戏</button>
+        </div>
+        <div id="game-over-screen" style="display: none;">
+            <h1>游戏结束</h1>
+            <p>你的分数: <span id="finalScore">0</span></p>
+            <button id="restartButton">重新开始</button>
+        </div>
+        <div id="level-complete-screen" style="display: none;">
+            <h1>关卡完成！</h1>
+            <p>准备好迎接 Boss 战！</p>
+            <button id="nextLevelButton">继续</button>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = 360;
+        canvas.height = 640;
+
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const levelCompleteScreen = document.getElementById('level-complete-screen');
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.getElementById('restartButton');
+        const nextLevelButton = document.getElementById('nextLevelButton');
+        const finalScoreSpan = document.getElementById('finalScore');
+
+        let gameRunning = false;
+        let score = 0;
+        let level = 1;
+        let lives = 3;
+        let lastShootTime = 0;
+        let lastEnemySpawnTime = 0;
+        let bossActive = false;
+        let bossDefeated = false;
+
+        // 游戏对象
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height - 50,
+            width: 30,
+            height: 30,
+            speed: 5,
+            color: 'cyan',
+            health: 100,
+            maxHealth: 100,
+            img: new Image()
+        };
+        player.img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzMCIgaGVpZ2h0PSIzMCIgdmlld0JveD0iMCAwIDMwIDMwIj48cG9seWdvbiBmaWxsPSIjMDBmZmZmIiBwb2ludHM9IjE1LDAgMCwzMCAxNSwyMiAzMCwzMCIvPjwvc3ZnPg=='; // 简单的飞船SVG
+
+        let bullets = [];
+        const bulletSpeed = 7;
+        const bulletCooldown = 200; // 毫秒
+
+        let enemies = [];
+        const enemySpawnInterval = 1500; // 毫秒
+        const enemySpeed = 1;
+
+        let explosions = [];
+
+        const boss = {
+            x: canvas.width / 2,
+            y: 50,
+            width: 80,
+            height: 80,
+            speedX: 2,
+            speedY: 0.5,
+            health: 200,
+            maxHealth: 200,
+            color: 'red',
+            bullets: [],
+            bulletCooldown: 1000,
+            lastShootTime: 0,
+            img: new Image()
+        };
+        boss.img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI4MCIgaGVpZ2h0PSI4MCIgdmlld0JveD0iMCAwIDgwIDgwIj48Y2lyY2xlIGN4PSI0MCIgY3k9IjQwIiByPSIzNSIgZmlsbD0iI2ZmMDAwMCIgc3Ryb2tlPSIjZmY3NzAwIiBzdHJva2Utd2lkdGg9IjMiLz48cGF0aCBkPSJNMjUgMzVsMTUgMjAgMTUtMjAgLTYgMGwtOSAxMiAtOSAtMTIgLTYgMHoiIGZpbGw9IiNmZmZmZmYiLz48L3N2Zz4='; // 简单的Boss SVG
+
+        // 输入处理
+        let mouseX = player.x;
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // 防止滚动
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            mouseX = touch.clientX - rect.left;
+        }, { passive: false });
+
+        // 游戏状态重置
+        function resetGame() {
+            score = 0;
+            level = 1;
+            lives = 3;
+            player.health = player.maxHealth;
+            player.x = canvas.width / 2;
+            player.y = canvas.height - 50;
+            bullets = [];
+            enemies = [];
+            explosions = [];
+            bossActive = false;
+            bossDefeated = false;
+            boss.health = boss.maxHealth;
+            boss.x = canvas.width / 2;
+            boss.y = 50;
+            boss.bullets = [];
+            lastShootTime = 0;
+            lastEnemySpawnTime = 0;
+        }
+
+        // 绘制函数
+        function drawPlayer() {
+            ctx.drawImage(player.img, player.x - player.width / 2, player.y - player.height / 2, player.width, player.height);
+            // 绘制血条
+            ctx.fillStyle = 'gray';
+            ctx.fillRect(player.x - player.width / 2, player.y + player.height / 2 + 5, player.width, 3);
+            ctx.fillStyle = 'lime';
+            ctx.fillRect(player.x - player.width / 2, player.y + player.height / 2 + 5, player.width * (player.health / player.maxHealth), 3);
+        }
+
+        function drawBullets() {
+            bullets.forEach(bullet => {
+                ctx.fillStyle = 'lime';
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+        }
+
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                ctx.fillStyle = enemy.color;
+                ctx.fillRect(enemy.x - enemy.width / 2, enemy.y - enemy.height / 2, enemy.width, enemy.height);
+                // 绘制血条
+                ctx.fillStyle = 'gray';
+                ctx.fillRect(enemy.x - enemy.width / 2, enemy.y + enemy.height / 2 + 3, enemy.width, 2);
+                ctx.fillStyle = 'orange';
+                ctx.fillRect(enemy.x - enemy.width / 2, enemy.y + enemy.height / 2 + 3, enemy.width * (enemy.health / enemy.maxHealth), 2);
+            });
+        }
+
+        function drawBoss() {
+            ctx.drawImage(boss.img, boss.x - boss.width / 2, boss.y - boss.height / 2, boss.width, boss.height);
+            // 绘制血条
+            ctx.fillStyle = 'gray';
+            ctx.fillRect(boss.x - boss.width / 2, boss.y + boss.height / 2 + 10, boss.width, 5);
+            ctx.fillStyle = 'red';
+            ctx.fillRect(boss.x - boss.width / 2, boss.y + boss.height / 2 + 10, boss.width * (boss.health / boss.maxHealth), 5);
+
+            boss.bullets.forEach(bullet => {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+        }
+
+        function drawExplosions() {
+            explosions.forEach(exp => {
+                ctx.fillStyle = exp.color;
+                ctx.beginPath();
+                ctx.arc(exp.x, exp.y, exp.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawUI() {
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Arial';
+            ctx.fillText(`分数: ${score}`, 10, 20);
+            ctx.fillText(`生命: ${lives}`, 10, 40);
+            ctx.fillText(`关卡: ${level}`, canvas.width - 70, 20);
+        }
+
+        // 更新函数
+        function updatePlayer() {
+            const targetX = mouseX;
+            if (Math.abs(targetX - player.x) > player.speed) {
+                if (targetX < player.x) {
+                    player.x -= player.speed;
+                } else {
+                    player.x += player.speed;
+                }
+            } else {
+                player.x = targetX;
+            }
+
+            player.x = Math.max(player.width / 2, Math.min(canvas.width - player.width / 2, player.x));
+
+            // 自动射击
+            const currentTime = Date.now();
+            if (currentTime - lastShootTime > bulletCooldown) {
+                bullets.push({
+                    x: player.x - 2,
+                    y: player.y - player.height / 2 - 5,
+                    width: 4,
+                    height: 10,
+                    color: 'lime'
+                });
+                lastShootTime = currentTime;
+            }
+        }
+
+        function updateBullets() {
+            bullets.forEach((bullet, index) => {
+                bullet.y -= bulletSpeed;
+                if (bullet.y < 0) {
+                    bullets.splice(index, 1);
+                }
+            });
+        }
+
+        function updateEnemies() {
+            enemies.forEach((enemy, index) => {
+                enemy.y += enemySpeed + (level * 0.2); // 敌人速度随关卡增加
+                if (enemy.y > canvas.height + enemy.height) {
+                    enemies.splice(index, 1);
+                    // 漏掉的敌人扣血或扣命
+                    player.health -= 10;
+                    if (player.health <= 0) {
+                        lives--;
+                        player.health = player.maxHealth;
+                        if (lives <= 0) {
+                            gameOver();
+                        }
+                    }
+                }
+            });
+
+            // 敌人生成
+            const currentTime = Date.now();
+            if (!bossActive && currentTime - lastEnemySpawnTime > enemySpawnInterval / level) { // 敌人生成速度随关卡增加
+                enemies.push({
+                    x: Math.random() * (canvas.width - 40) + 20,
+                    y: -20,
+                    width: 20,
+                    height: 20,
+                    color: 'orange',
+                    health: 10 * level, // 敌人血量随关卡增加
+                    maxHealth: 10 * level
+                });
+                lastEnemySpawnTime = currentTime;
+            }
+        }
+
+        function updateBoss() {
+            if (!bossActive) return;
+
+            // Boss 移动
+            boss.x += boss.speedX;
+            if (boss.x + boss.width / 2 > canvas.width || boss.x - boss.width / 2 < 0) {
+                boss.speedX *= -1;
+            }
+            boss.y += boss.speedY;
+            if (boss.y + boss.height / 2 > canvas.height / 3 || boss.y - boss.height / 2 < 0) {
+                boss.speedY *= -1;
+            }
+
+            // Boss 射击
+            const currentTime = Date.now();
+            if (currentTime - boss.lastShootTime > boss.bulletCooldown / (1 + level * 0.1)) {
+                // 简单地向玩家方向射击
+                const angle = Math.atan2(player.y - boss.y, player.x - boss.x);
+                const bulletSpeedBoss = 3 + (level * 0.5);
+                boss.bullets.push({
+                    x: boss.x,
+                    y: boss.y,
+                    width: 6,
+                    height: 12,
+                    color: 'red',
+                    vx: Math.cos(angle) * bulletSpeedBoss,
+                    vy: Math.sin(angle) * bulletSpeedBoss
+                });
+                boss.lastShootTime = currentTime;
+            }
+
+            // 更新 Boss 子弹
+            boss.bullets.forEach((bullet, index) => {
+                bullet.x += bullet.vx;
+                bullet.y += bullet.vy;
+                if (bullet.y > canvas.height || bullet.y < 0 || bullet.x > canvas.width || bullet.x < 0) {
+                    boss.bullets.splice(index, 1);
+                }
+            });
+        }
+
+        function updateExplosions() {
+            explosions.forEach((exp, index) => {
+                exp.radius += 0.5;
+                exp.alpha -= 0.02;
+                exp.color = `rgba(255, 165, 0, ${exp.alpha})`; // 橙色爆炸效果
+                if (exp.alpha <= 0) {
+                    explosions.splice(index, 1);
+                }
+            });
+        }
+
+        // 碰撞检测
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+
+        function checkCollisions() {
+            // 玩家子弹与敌人
+            bullets.forEach((bullet, bIndex) => {
+                enemies.forEach((enemy, eIndex) => {
+                    if (checkCollision({x: bullet.x, y: bullet.y, width: bullet.width, height: bullet.height},
+                                       {x: enemy.x - enemy.width / 2, y: enemy.y - enemy.height / 2, width: enemy.width, height: enemy.height})) {
+                        explosions.push({x: enemy.x, y: enemy.y, radius: 5, alpha: 1});
+                        bullets.splice(bIndex, 1);
+                        enemy.health -= 10; // 子弹伤害
+                        if (enemy.health <= 0) {
+                            enemies.splice(eIndex, 1);
+                            score += 10;
+                        }
+                    }
+                });
+                if (bossActive && !bossDefeated) {
+                    if (checkCollision({x: bullet.x, y: bullet.y, width: bullet.width, height: bullet.height},
+                                       {x: boss.x - boss.width / 2, y: boss.y - boss.height / 2, width: boss.width, height: boss.height})) {
+                        explosions.push({x: bullet.x, y: bullet.y, radius: 5, alpha: 1});
+                        bullets.splice(bIndex, 1);
+                        boss.health -= 5; // Boss 受伤
+                        if (boss.health <= 0) {
+                            bossDefeated = true;
+                            score += 500;
+                            explosions.push({x: boss.x, y: boss.y, radius: 20, alpha: 1, color: 'rgba(255, 0, 0, 1)'});
+                            setTimeout(() => {
+                                levelComplete();
+                            }, 1000); // Boss 爆炸后进入下一关卡
+                        }
+                    }
+                }
+            });
+
+            // 敌人与玩家
+            enemies.forEach((enemy, eIndex) => {
+                if (checkCollision({x: player.x - player.width / 2, y: player.y - player.height / 2, width: player.width, height: player.height},
+                                   {x: enemy.x - enemy.width / 2, y: enemy.y - enemy.height / 2, width: enemy.width, height: enemy.height})) {
+                    explosions.push({x: player.x, y: player.y, radius: 10, alpha: 1});
+                    explosions.push({x: enemy.x, y: enemy.y, radius: 5, alpha: 1});
+                    enemies.splice(eIndex, 1);
+                    player.health -= 30; // 敌人撞击伤害
+                    if (player.health <= 0) {
+                        lives--;
+                        player.health = player.maxHealth;
+                        if (lives <= 0) {
+                            gameOver();
+                        }
+                    }
+                }
+            });
+
+            // Boss 子弹与玩家
+            if (bossActive && !bossDefeated) {
+                boss.bullets.forEach((bullet, bIndex) => {
+                    if (checkCollision({x: player.x - player.width / 2, y: player.y - player.height / 2, width: player.width, height: player.height},
+                                       {x: bullet.x, y: bullet.y, width: bullet.width, height: bullet.height})) {
+                        explosions.push({x: bullet.x, y: bullet.y, radius: 5, alpha: 1});
+                        boss.bullets.splice(bIndex, 1);
+                        player.health -= 20; // Boss 子弹伤害
+                        if (player.health <= 0) {
+                            lives--;
+                            player.health = player.maxHealth;
+                            if (lives <= 0) {
+                                gameOver();
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // 游戏循环
+        function gameLoop() {
+            if (!gameRunning) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            updatePlayer();
+            updateBullets();
+            updateEnemies();
+            updateBoss(); // 无论是否激活，都更新，因为 Boss 子弹也需要更新
+            updateExplosions();
+            checkCollisions();
+
+            drawPlayer();
+            drawBullets();
+            drawEnemies();
+            if (bossActive) {
+                drawBoss();
+            }
+            drawExplosions();
+            drawUI();
+
+            // 关卡进度
+            if (score >= level * 200 && !bossActive && !bossDefeated) { // 每200分进入Boss战
+                startBossBattle();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function startBossBattle() {
+            bossActive = true;
+            enemies = []; // 清除小怪
+            boss.health = boss.maxHealth * (1 + level * 0.5); // Boss 血量随关卡增加
+            boss.maxHealth = boss.health;
+            boss.lastShootTime = Date.now(); // 重置 Boss 射击计时
+            levelCompleteScreen.style.display = 'flex';
+            gameRunning = false; // 暂停游戏，等待玩家点击
+        }
+
+        function levelComplete() {
+            bossActive = false;
+            bossDefeated = false;
+            level++;
+            player.health = player.maxHealth; // 玩家回满血
+            enemies = []; // 清除所有敌人
+            boss.bullets = []; // 清除所有Boss子弹
+            levelCompleteScreen.style.display = 'none'; // 隐藏关卡完成屏幕
+            gameRunning = true; // 继续游戏
+            // 如果想在每个 Boss 战后显示"关卡完成"屏幕，可以重新显示 levelCompleteScreen
+            // 但这里直接继续游戏，直到下一个 Boss 战触发
+        }
+
+
+        function gameOver() {
+            gameRunning = false;
+            finalScoreSpan.textContent = score;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        startButton.addEventListener('click', () => {
+            startScreen.style.display = 'none';
+            resetGame();
+            gameRunning = true;
+            gameLoop();
+        });
+
+        restartButton.addEventListener('click', () => {
+            gameOverScreen.style.display = 'none';
+            resetGame();
+            gameRunning = true;
+            gameLoop();
+        });
+
+        nextLevelButton.addEventListener('click', () => {
+            levelCompleteScreen.style.display = 'none';
+            gameRunning = true; // 恢复游戏
+            // Boss 战开始，游戏已经暂停，这里点击后继续游戏，Boss 已经激活
+            // 确保 Boss 的状态是正确的，例如血量重置
+            boss.health = boss.maxHealth;
+            boss.bullets = [];
+            // 不需要调用 levelComplete()，因为 Boss 战已经开始，只需继续游戏循环
+            gameLoop();
+        });
+
+        // 初始显示开始屏幕
+        startScreen.style.display = 'flex';
+
+    </script>
+</body>
+</html>

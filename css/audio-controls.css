@@ -1,0 +1,142 @@
+/* 音频控制面板 */
+.audio-controls {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 1000;
+    min-width: 180px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.audio-controls.hidden {
+    display: none;
+}
+
+.audio-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.audio-title {
+    color: #fff;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.audio-toggle {
+    background: transparent;
+    border: none;
+    color: #4fd1c5;
+    cursor: pointer;
+    font-size: 18px;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.audio-toggle:hover {
+    background: rgba(79, 209, 197, 0.2);
+}
+
+.volume-slider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.volume-label {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 12px;
+    min-width: 40px;
+}
+
+.volume-slider input[type="range"] {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.2);
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.volume-slider input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #4fd1c5;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.volume-slider input[type="range"]::-webkit-slider-thumb:hover {
+    background: #38b2ac;
+    transform: scale(1.2);
+}
+
+.mute-btn {
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    color: #fff;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+
+.mute-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.mute-btn.muted {
+    background: #fc8181;
+}
+
+/* 游戏内音频控制（小面板） */
+.game-audio-control {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 8px;
+    padding: 8px;
+    display: flex;
+    gap: 8px;
+    z-index: 100;
+}
+
+.game-audio-btn {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #fff;
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+
+.game-audio-btn:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: #4fd1c5;
+}
+
+.game-audio-btn.muted {
+    border-color: #fc8181;
+    color: #fc8181;
+}

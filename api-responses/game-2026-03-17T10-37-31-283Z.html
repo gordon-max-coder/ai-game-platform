@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>飞机大战</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0f0f1a;
+            font-family: PingFang SC, Microsoft YaHei, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        canvas {
+            width: 360px;
+            height: 640px;
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 360;
+        canvas.height = 640;
+
+        // 游戏状态
+        let gameState = 'menu'; // menu, playing, paused, gameover
+        let score = 0;
+        let highScore = localStorage.getItem('planeWarHighScore') || 0;
+
+        // 玩家飞机
+        let player = {
+            x: canvas.width / 2 - 20,
+            y: canvas.height - 60,
+            width: 40,
+            height: 40,
+            speed: 5,
+            dx: 0
+        };
+
+        // 敌机和子弹数组
+        let enemies = [];
+        let bullets = [];
+
+        // 输入状态
+        let keys = {};
+
+        // 输入处理函数
+        function handleInput(key, pressed) {
+            keys[key] = pressed;
+            if (key === ' ' && pressed) {
+                if (gameState === 'menu') {
+                    startGame();
+                } else if (gameState === 'playing') {
+                    shootBullet();
+                } else if (gameState === 'gameover') {
+                    startGame();
+                }
+            } else if (key === 'p' || key === 'P') {
+                if (pressed && (gameState === 'playing' || gameState === 'paused')) {
+                    togglePause();
+                }
+            }
+        }
+
+        // 事件监听
+        document.addEventListener('keydown', (e) => {
+            handleInput(e.key, true);
+        });
+        document.addEventListener('keyup', (e) => {
+            handleInput(e.key, false);
+        });
+
+        // 开始游戏
+        function startGame() {
+            gameState = 'playing';
+            score = 0;
+            player.x = canvas.width / 2 - 20;
+            enemies = [];
+            bullets = [];
+        }
+
+        // 切换暂停
+        function togglePause() {
+            if (gameState === 'playing') {
+                gameState = 'paused';
+            } else if (gameState === 'paused') {
+                gameState = 'playing';
+            }
+        }
+
+        // 发射子弹
+        function shootBullet() {
+            let bullet = {
+                x: player.x + player.width / 2 - 2,
+                y: player.y,
+                width: 4,
+                height: 10,
+                speed: 7
+            };
+            bullets.push(bullet);
+        }
+
+        // 生成敌机
+        function spawnEnemy() {
+            let enemy = {
+                x: Math.random() * (canvas.width - 30),
+                y: -30,
+                width: 30,
+                height: 30,
+                speed: 2 + Math.random() * 2
+            };
+            enemies.push(enemy);
+        }
+
+        // 碰撞检测
+        function checkCollisions() {
+            // 子弹与敌机
+            for (let bIndex = bullets.length - 1; bIndex >= 0; bIndex--) {
+                let bullet = bullets[bIndex];
+                for (let eIndex = enemies.length - 1; eIndex >= 0; eIndex--) {
+                    let enemy = enemies[eIndex];
+                    if (bullet.x < enemy.x + enemy.width &&
+                        bullet.x + bullet.width > enemy.x &&
+                        bullet.y < enemy.y + enemy.height &&
+                        bullet.y + bullet.height > enemy.y) {
+                        bullets.splice(bIndex, 1);
+                        enemies.splice(eIndex, 1);
+                        score += 10;
+                        if (score > highScore) {
+                            highScore = score;
+                            localStorage.setItem('planeWarHighScore', highScore);
+                        }
+                        break;
+                    }
+                }
+            }
+
+            // 敌机与玩家
+            for (let eIndex = enemies.length - 1; eIndex >= 0; eIndex--) {
+                let enemy = enemies[eIndex];
+                if (player.x < enemy.x + enemy.width &&
+                    player.x + player.width > enemy.x &&
+                    player.y < enemy.y + enemy.height &&
+                    player.y + player.height > enemy.y) {
+                    gameState = 'gameover';
+                }
+            }
+        }
+
+        // 更新游戏逻辑
+        function update(deltaTime) {
+            if (gameState !== 'playing') return;
+
+            // 玩家移动
+            player.dx = 0;
+            if (keys['ArrowLeft'] || keys['a'] || keys['A']) player.dx = -player.speed;
+            if (keys['ArrowRight'] || keys['d'] || keys['D']) player.dx = player.speed;
+            player.x += player.dx;
+            // 边界检查
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+
+            // 更新子弹
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].y -= bullets[i].speed;
+                if (bullets[i].y < 0) bullets.splice(i, 1);
+            }
+
+            // 更新敌机
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                enemies[i].y += enemies[i].speed;
+                if (enemies[i].y > canvas.height) enemies.splice(i, 1);
+            }
+
+            // 生成敌机
+            if (Math.random() < 0.02) spawnEnemy();
+
+            // 碰撞检测
+            checkCollisions();
+        }
+
+        // 绘制菜单
+        function drawMenu() {
+            ctx.fillStyle = 'white';
+            ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('飞机大战', canvas.width / 2, canvas.height / 2 - 50);
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('按空格键开始游戏', canvas.width / 2, canvas.height / 2);
+            ctx.fillText('最高分: ' + highScore, canvas.width / 2, canvas.height / 2 + 40);
+        }
+
+        // 绘制游戏画面
+        function drawGame() {
+            // 绘制玩家飞机
+            ctx.fillStyle = '#4fd1c5';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+
+            // 绘制敌机
+            ctx.fillStyle = '#ff6b6b';
+            enemies.forEach(enemy => {
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            });
+
+            // 绘制子弹
+            ctx.fillStyle = '#ffd93d';
+            bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+
+            // 绘制得分
+            ctx.fillStyle = 'white';
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('得分: ', canvas.width / 2 - 30, 30);
+            ctx.fillStyle = '#4fd1c5';
+            ctx.fillText(score, canvas.width / 2 + 20, 30);
+        }
+
+        // 绘制暂停屏幕
+        function drawPauseScreen() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('游戏暂停', canvas.width / 2, canvas.height / 2);
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('按 P 继续', canvas.width / 2, canvas.height / 2 + 40);
+        }
+
+        // 绘制游戏结束屏幕
+        function drawGameOverScreen() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('游戏结束', canvas.width / 2, canvas.height / 2 - 50);
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('得分: ' + score, canvas.width / 2, canvas.height / 2);
+            ctx.fillText('最高分: ' + highScore, canvas.width / 2, canvas.height / 2 + 40);
+            ctx.fillText('按空格键重新开始', canvas.width / 2, canvas.height / 2 + 80);
+        }
+
+        // 渲染函数
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (gameState === 'menu') {
+                drawMenu();
+            } else if (gameState === 'playing') {
+                drawGame();
+            } else if (gameState === 'paused') {
+                drawGame();
+                drawPauseScreen();
+            } else if (gameState === 'gameover') {
+                drawGame();
+                drawGameOverScreen();
+            }
+        }
+
+        // 游戏循环
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            let deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            update(deltaTime);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 启动游戏循环
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

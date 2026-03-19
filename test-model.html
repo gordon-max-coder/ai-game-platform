@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Test Model</title>
+</head>
+<body>
+    <h1>API Model Test</h1>
+    <button onclick="testHealth()">Test /api/health</button>
+    <button onclick="testGenerate()">Test /api/generate</button>
+    <pre id="result"></pre>
+
+    <script>
+        async function testHealth() {
+            const res = await fetch('/api/health');
+            const data = await res.json();
+            document.getElementById('result').textContent = JSON.stringify(data, null, 2);
+        }
+
+        async function testGenerate() {
+            const res = await fetch('/api/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    prompt: 'test',
+                    model: 'test'
+                })
+            });
+            const text = await res.text();
+            document.getElementById('result').textContent = text;
+        }
+    </script>
+</body>
+</html>

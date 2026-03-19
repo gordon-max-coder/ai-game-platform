@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong with AI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 360;
+        canvas.height = 640;
+
+        // Game states
+        const MENU = 'menu';
+        const PLAYING = 'playing';
+        const PAUSED = 'paused';
+        const GAMEOVER = 'gameover';
+        let gameState = MENU;
+
+        // Game variables
+        let playerPaddle, aiPaddle, ball;
+        let playerScore = 0, aiScore = 0;
+        let highScore = localStorage.getItem('pongHighScore') || 0;
+        let lastTime = 0;
+        let keys = {};
+
+        // Paddle class
+        class Paddle {
+            constructor(x, y, width, height, isPlayer = false) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.speed = 5;
+                this.isPlayer = isPlayer;
+                this.targetY = y;
+            }
+
+            update(deltaTime) {
+                if (this.isPlayer) {
+                    if (keys['ArrowLeft'] || keys['a']) {
+                        this.x -= this.speed;
+                    }
+                    if (keys['ArrowRight'] || keys['d']) {
+                        this.x += this.speed;
+                    }
+                    // Keep paddle within bounds
+                    this.x = Math.max(0, Math.min(canvas.width - this.width, this.x));
+                } else {
+                    // AI paddle movement
+                    const aiSpeed = 4;
+                    if (ball.y < this.y + this.height / 2) {
+                        this.targetY = ball.y - this.height / 2;
+                    } else {
+                        this.targetY = ball.y - this.height / 2;
+                    }
+                    // Smooth AI movement
+                    const diff = this.targetY - this.y;
+                    this.y += diff * 0.1;
+                    // Keep AI paddle within bounds
+                    this.y = Math.max(0, Math.min(canvas.height - this.height, this.y));
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = this.isPlayer ? '#4fd1c5' : '#ff6b6b';
+                ctx.beginPath();
+                ctx.roundRect(this.x, this.y, this.width, this.height, 6);
+                ctx.fill();
+            }
+        }
+
+        // Ball class
+        class Ball {
+            constructor(x, y, radius) {
+                this.x = x;
+                this.y = y;
+                this.radius = radius;
+                this.speedX = 4;
+                this.speedY = 4;
+                this.reset();
+            }
+
+            reset() {
+                this.x = canvas.width / 2;
+                this.y = canvas.height / 2;
+                this.speedX = (Math.random() > 0.5 ? 1 : -1) * 4;
+                this.speedY = (Math.random() > 0.5 ? 1 : -1) * 4;
+            }
+
+            update(deltaTime) {
+                this.x += this.speedX;
+                this.y += this.speedY;
+
+                // Bounce off top and bottom
+                if (this.y - this.radius < 0 || this.y + this.radius > canvas.height) {
+                    this.speedY *= -1;
+                }
+
+                // Bounce off paddles
+                if (this.checkCollision(playerPaddle) || this.checkCollision(aiPaddle)) {
+                    this.speedX *= -1;
+                    // Increase speed slightly
+                    this.speedX *= 1.05;
+                    this.speedY *= 1.05;
+                }
+
+                // Score points
+                if (this.x - this.radius < 0) {
+                    aiScore++;
+                    this.reset();
+                } else if (this.x + this.radius > canvas.width) {
+                    playerScore++;
+                    this.reset();
+                }
+
+                // Check for game over
+                if (playerScore >= 5 || aiScore >= 5) {
+                    if (playerScore > highScore) {
+                        highScore = playerScore;
+                        localStorage.setItem('pongHighScore', highScore);
+                    }
+                    gameState = GAMEOVER;
+                }
+            }
+
+            checkCollision(paddle) {
+                return this.x - this.radius < paddle.x + paddle.width &&
+                       this.x + this.radius > paddle.x &&
+                       this.y - this.radius < paddle.y + paddle.height &&
+                       this.y + this.radius > paddle.y;
+            }
+
+            draw() {
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Initialize game
+        function initGame() {
+            playerPaddle = new Paddle(canvas.width / 2 - 40, canvas.height - 30, 80, 15, true);
+            aiPaddle = new Paddle(canvas.width / 2 - 40, 15, 80, 15, false);
+            ball = new Ball(canvas.width / 2, canvas.height / 2, 10);
+            playerScore = 0;
+            aiScore = 0;
+        }
+
+        // Update function
+        function update(deltaTime) {
+            if (gameState === PLAYING) {
+                playerPaddle.update(deltaTime);
+                aiPaddle.update(deltaTime);
+                ball.update(deltaTime);
+            }
+        }
+
+        // Render function
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(1, '#16213e');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw center line
+            ctx.strokeStyle = '#ffffff20';
+            ctx.setLineDash([10, 10]);
+            ctx.beginPath();
+            ctx.moveTo(0, canvas.height / 2);
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw paddles and ball
+            if (gameState === PLAYING || gameState === PAUSED) {
+                playerPaddle.draw();
+                aiPaddle.draw();
+                ball.draw();
+            }
+
+            // Draw score
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(`Player: ${playerScore}  AI: ${aiScore}`, canvas.width / 2, 30);
+
+            // Draw high score
+            ctx.fillStyle = '#4fd1c5';
+            ctx.font = '16px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText(`High Score: ${highScore}`, canvas.width / 2, 55);
+
+            // Draw game state overlays
+            if (gameState === MENU) {
+                drawOverlay('PONG AI', 'Press SPACE to Start', 'Use Arrow Keys or A/D to Move');
+            } else if (gameState === PAUSED) {
+                drawOverlay('PAUSED', 'Press P to Resume', 'Press Q to Quit');
+            } else if (gameState === GAMEOVER) {
+                const winner = playerScore >= 5 ? 'You Win!' : 'AI Wins!';
+                drawOverlay(winner, 'Press SPACE to Restart', 'Press Q for Menu');
+            }
+        }
+
+        // Draw overlay for menus and messages
+        function drawOverlay(title, subtitle1, subtitle2) {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 36px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(title, canvas.width / 2, canvas.height / 2 - 40);
+
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText(subtitle1, canvas.width / 2, canvas.height / 2 + 10);
+
+            ctx.font = '16px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillStyle = '#4fd1c5';
+            ctx.fillText(subtitle2, canvas.width / 2, canvas.height / 2 + 40);
+        }
+
+        // Input handling
+        function handleInput(key, pressed) {
+            keys[key] = pressed;
+
+            if (pressed) {
+                if (gameState === MENU && key === ' ') {
+                    initGame();
+                    gameState = PLAYING;
+                } else if (gameState === PLAYING && key === 'p') {
+                    gameState = PAUSED;
+                } else if (gameState === PAUSED && key === 'p') {
+                    gameState = PLAYING;
+                } else if (gameState === PAUSED && key === 'q') {
+                    gameState = MENU;
+                } else if (gameState === GAMEOVER && key === ' ') {
+                    initGame();
+                    gameState = PLAYING;
+                } else if (gameState === GAMEOVER && key === 'q') {
+                    gameState = MENU;
+                }
+            }
+        }
+
+        // Event listeners for keyboard input
+        document.addEventListener('keydown', (e) => {
+            handleInput(e.key, true);
+        });
+        document.addEventListener('keyup', (e) => {
+            handleInput(e.key, false);
+        });
+
+        // Game loop
+        function gameLoop(currentTime) {
+            const deltaTime = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+
+            update(deltaTime);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game
+        initGame();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

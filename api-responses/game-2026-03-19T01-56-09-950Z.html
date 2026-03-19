@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>飞机大战</title>
+    <style>
+        body { margin: 0; background: #0f3460; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+        canvas { width: 360px; height: 640px; background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%); border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4); display: block; }
+    </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 360;
+    canvas.height = 640;
+
+    let gameState = 'menu'; // menu, playing, gameover
+    let score = 0;
+    let highScore = localStorage.getItem('highScore') || 0;
+    let player = { x: 165, y: 550, w: 30, h: 30, speed: 5 };
+    let bullets = [];
+    let enemies = [];
+    let frameCount = 0;
+
+    function handleInput(key, pressed) {
+        if (gameState === 'menu' && key === 'Enter') gameState = 'playing';
+        if (gameState === 'gameover' && key === 'Enter') {
+            score = 0; enemies = []; bullets = []; gameState = 'playing';
+        }
+        if (gameState === 'playing') {
+            if (key === 'ArrowLeft') player.x = Math.max(0, player.x - 20);
+            if (key === 'ArrowRight') player.x = Math.min(330, player.x + 20);
+            if (key === ' ') bullets.push({ x: player.x + 12, y: player.y, w: 6, h: 10 });
+        }
+    }
+
+    window.addEventListener('keydown', (e) => handleInput(e.key, true));
+
+    function update(deltaTime) {
+        if (gameState !== 'playing') return;
+
+        frameCount++;
+        if (frameCount % 30 === 0) enemies.push({ x: Math.random() * 330, y: -30, w: 30, h: 30, speed: 2 + score / 500 });
+
+        bullets.forEach((b, i) => {
+            b.y -= 7;
+            if (b.y < 0) bullets.splice(i, 1);
+        });
+
+        enemies.forEach((e, i) => {
+            e.y += e.speed;
+            if (e.y > 640) { gameState = 'gameover'; if(score > highScore) localStorage.setItem('highScore', score); }
+            
+            bullets.forEach((b, bi) => {
+                if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
+                    enemies.splice(i, 1); bullets.splice(bi, 1); score += 10;
+                }
+            });
+        });
+    }
+
+    function render() {
+        ctx.clearRect(0, 0, 360, 640);
+        
+        if (gameState === 'menu') {
+            ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+            ctx.fillText('按回车键开始游戏', 180, 320);
+        } else if (gameState === 'playing' || gameState === 'gameover') {
+            ctx.fillStyle = '#4fd1c5'; ctx.fillRect(player.x, player.y, player.w, player.h);
+            ctx.fillStyle = '#ff6b6b';
+            enemies.forEach(e => ctx.fillRect(e.x, e.y, e.w, e.h));
+            ctx.fillStyle = '#fff';
+            bullets.forEach(b => ctx.fillRect(b.x, b.y, b.w, b.h));
+            
+            ctx.fillStyle = '#fff'; ctx.font = '20px Arial';
+            ctx.fillText(`得分: `, 160, 40);
+            ctx.fillStyle = '#4fd1c5'; ctx.fillText(score, 210, 40);
+        }
+
+        if (gameState === 'gameover') {
+            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0,0,360,640);
+            ctx.fillStyle = '#fff'; ctx.fillText('游戏结束', 180, 300);
+            ctx.fillText('按回车重试', 180, 340);
+        }
+    }
+
+    function loop() {
+        update(16);
+        render();
+        requestAnimationFrame(loop);
+    }
+    loop();
+</script>
+</body>
+</html>

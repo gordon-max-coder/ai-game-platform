@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🧪 CodeModifier 测试</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .test-case {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-case h3 {
+            margin-top: 0;
+            color: #2196F3;
+        }
+        .code-block {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .error {
+            color: #f44336;
+            font-weight: bold;
+        }
+        .result {
+            background: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .error-result {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button.test-all {
+            background: #2196F3;
+            font-size: 16px;
+            padding: 12px 24px;
+        }
+        .stats {
+            background: #fff3e0;
+            border-left: 4px solid #ff9800;
+            padding: 15px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 CodeModifier 测试</h1>
+    
+    <div class="stats">
+        <h3>📊 测试统计</h3>
+        <div id="stats">点击"运行所有测试"开始</div>
+    </div>
+    
+    <button class="test-all" onclick="runAllTests()">▶️ 运行所有测试</button>
+    
+    <div id="testResults"></div>
+
+    <!-- 引入 CodeModifier -->
+    <script src="js/code-modifier.js"></script>
+    
+    <script>
+        let passed = 0;
+        let failed = 0;
+        
+        function logResult(testName, success, message, before, after) {
+            const div = document.createElement('div');
+            div.className = 'test-case';
+            
+            if (success) {
+                div.innerHTML = `
+                    <h3 class="success">✅ ${testName}</h3>
+                    <div class="result">
+                        <strong>结果:</strong> ${message}
+                    </div>
+                    ${before ? `<div class="code-block"><strong>修改前:</strong>\n${escapeHtml(before)}</div>` : ''}
+                    ${after ? `<div class="code-block"><strong>修改后:</strong>\n${escapeHtml(after)}</div>` : ''}
+                `;
+                passed++;
+            } else {
+                div.innerHTML = `
+                    <h3 class="error">❌ ${testName}</h3>
+                    <div class="result error-result">
+                        <strong>错误:</strong> ${message}
+                    </div>
+                    ${before ? `<div class="code-block"><strong>原始代码:</strong>\n${escapeHtml(before)}</div>` : ''}
+                `;
+                failed++;
+            }
+            
+            document.getElementById('testResults').appendChild(div);
+        }
+        
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+        
+        function test1() {
+            const name = '测试 1: 单一变量修改';
+            const code = `const speed = 300;`;
+            const result = CodeModifier.safeReplace(code, 'speed', 500);
+            
+            if (result.success && result.newCode.includes('const speed = 500;')) {
+                logResult(name, true, '成功修改', code, result.newCode);
+            } else {
+                logResult(name, false, result.error, code);
+            }
+        }
+        
+        function test2() {
+            const name = '测试 2: 相似变量名不混淆';
+            const code = `const speed = 300;
+const playerSpeed = speed * 2;
+const maxSpeed = 600;`;
+            const result = CodeModifier.safeReplace(code, 'speed', 500);
+            
+            const expected = `const speed = 500;
+const playerSpeed = speed * 2;
+const maxSpeed = 600;`;
+            
+            if (result.success && result.newCode === expected && result.replaced === 1) {
+                logResult(name, true, '只修改了 speed，playerSpeed 和 maxSpeed 不变', code, result.newCode);
+            } else {
+                logResult(name, false, `预期只修改 1 处，实际修改 ${result.replaced} 处`, code, result.newCode);
+            }
+        }
+        
+        function test3() {
+            const name = '测试 3: 不存在的变量';
+            const code = `const speed = 300;`;
+            const result = CodeModifier.safeReplace(code, 'color', '#ff0000');
+            
+            if (!result.success && result.error.includes('未找到')) {
+                logResult(name, true, '正确报错：未找到变量', code);
+            } else {
+                logResult(name, false, '应该报错但未报错', code);
+            }
+        }
+        
+        function test4() {
+            const name = '测试 4: 多个相同声明';
+            const code = `const speed = 300;
+// 一些代码...
+const speed = 400;`;
+            const result = CodeModifier.safeReplace(code, 'speed', 500);
+            
+            if (!result.success && result.error.includes('2 个')) {
+                logResult(name, true, '正确报错：检测到多个声明', code);
+            } else {
+                logResult(name, false, '应该报错但未报错', code);
+            }
+        }
+        
+        function test5() {
+            const name = '测试 5: 带缩进的变量';
+            const code = `  const speed = 300;`;
+            const result = CodeModifier.safeReplace(code, 'speed', 500);
+            
+            if (result.success && result.newCode.includes('  const speed = 500;')) {
+                logResult(name, true, '保持缩进格式', code, result.newCode);
+            } else {
+                logResult(name, false, result.error, code);
+            }
+        }
+        
+        function test6() {
+            const name = '测试 6: let/var 声明';
+            const code = `let color = "#ff0000";
+var size = 32;`;
+            const result1 = CodeModifier.safeReplace(code, 'color', '"#0000ff"');
+            const result2 = CodeModifier.safeReplace(code, 'size', 48);
+            
+            if (result1.success && result2.success) {
+                logResult(name, true, '支持 let 和 var 声明', code, result1.newCode);
+            } else {
+                logResult(name, false, 'let/var 支持失败', code);
+            }
+        }
+        
+        function test7() {
+            const name = '测试 7: 对象属性不匹配';
+            const code = `const speed = 300;
+config.speed = 200;
+window.speed = 100;`;
+            const result = CodeModifier.safeReplace(code, 'speed', 500);
+            
+            // 应该只匹配第一行
+            if (result.success && result.replaced === 1) {
+                logResult(name, true, '只修改变量声明，不修改对象属性', code, result.newCode);
+            } else {
+                logResult(name, false, `应该只修改 1 处，实际修改 ${result.replaced} 处`, code, result.newCode);
+            }
+        }
+        
+        function test8() {
+            const name = '测试 8: 批量替换';
+            const code = `const speed = 300;
+const color = "#ff0000";
+const size = 32;`;
+            const result = CodeModifier.safeReplaceBatch(code, {
+                speed: 500,
+                color: '"#0000ff"',
+                size: 48
+            });
+            
+            if (result.success && result.replaced === 3) {
+                logResult(name, true, '批量替换成功', code, result.newCode);
+            } else {
+                logResult(name, false, `批量替换失败: ${result.errors.map(e => e.error).join(', ')}`, code);
+            }
+        }
+        
+        function test9() {
+            const name = '测试 9: 代码验证';
+            const validCode = `const speed = 300;
+function test() {
+    return speed * 2;
+}`;
+            const invalidCode = `const speed = 300;
+function test() {
+    return speed * 2;
+`;  // 缺少闭合括号
+            
+            const validResult = CodeModifier.validateCode(validCode);
+            const invalidResult = CodeModifier.validateCode(invalidCode);
+            
+            if (validResult.valid && !invalidResult.valid) {
+                logResult(name, true, '正确识别有效和无效代码', null);
+            } else {
+                logResult(name, false, '代码验证不准确', null);
+            }
+        }
+        
+        function test10() {
+            const name = '测试 10: 表达式值';
+            const code = `const speed = 100 + 200;`;
+            const result = CodeModifier.safeReplace(code, 'speed', 500);
+            
+            if (result.success && result.newCode.includes('const speed = 500;')) {
+                logResult(name, true, '能替换表达式值', code, result.newCode);
+            } else {
+                logResult(name, false, result.error, code);
+            }
+        }
+        
+        function runAllTests() {
+            passed = 0;
+            failed = 0;
+            document.getElementById('testResults').innerHTML = '';
+            
+            console.log('🧪 开始运行所有测试...');
+            
+            test1();
+            test2();
+            test3();
+            test4();
+            test5();
+            test6();
+            test7();
+            test8();
+            test9();
+            test10();
+            
+            const total = passed + failed;
+            const percentage = total > 0 ? Math.round((passed / total) * 100) : 0;
+            
+            document.getElementById('stats').innerHTML = `
+                <strong>总计:</strong> ${total} 个测试 | 
+                <span class="success">✅ 通过: ${passed}</span> | 
+                <span class="error">❌ 失败: ${failed}</span> | 
+                <strong>成功率:</strong> ${percentage}%
+            `;
+            
+            console.log(`🧪 测试完成：${passed}/${total} 通过 (${percentage}%)`);
+        }
+        
+        // 页面加载后自动运行测试
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('📄 页面加载完成，CodeModifier 已加载:', typeof CodeModifier);
+            // 自动运行测试
+            setTimeout(runAllTests, 500);
+        });
+    </script>
+</body>
+</html>

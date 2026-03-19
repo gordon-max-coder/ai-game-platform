@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>射击游戏</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: PingFang SC, Microsoft YaHei, sans-serif;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 360;
+        canvas.height = 640;
+
+        const GameState = {
+            MENU: 'menu',
+            PLAYING: 'playing',
+            PAUSED: 'paused',
+            GAMEOVER: 'gameover'
+        };
+
+        let state = GameState.MENU;
+        let score = 0;
+        let highScore = localStorage.getItem('highScore') || 0;
+
+        let player = {
+            x: canvas.width / 2 - 15,
+            y: canvas.height - 60,
+            width: 30,
+            height: 30,
+            speed: 5,
+            lives: 3,
+            doubleBulletTimer: 0
+        };
+
+        let enemies = [];
+        let bullets = [];
+        let powerUps = [];
+        let keys = {};
+        let lastTime = 0;
+        let deltaTime = 0;
+        let shootCooldown = 0;
+        const shootInterval = 0.2;
+        let enemySpawnTimer = 0;
+        const enemySpawnInterval = 1.5;
+
+        function gameLoop(currentTime) {
+            deltaTime = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+            update(deltaTime);
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function update(deltaTime) {
+            if (state === GameState.PLAYING) {
+                updatePlayer(deltaTime);
+                updateEnemies(deltaTime);
+                updateBullets(deltaTime);
+                updatePowerUps(deltaTime);
+                checkCollisions();
+                spawnEnemies(deltaTime);
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(1, '#16213e');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (state === GameState.MENU) {
+                drawMenu();
+            } else if (state === GameState.PLAYING) {
+                drawPlayer();
+                drawEnemies();
+                drawBullets();
+                drawPowerUps();
+                drawScore();
+                drawLives();
+            } else if (state === GameState.PAUSED) {
+                drawPaused();
+            } else if (state === GameState.GAMEOVER) {
+                drawGameOver();
+            }
+        }
+
+        function handleInput(key, pressed) {
+            keys[key] = pressed;
+            if (state === GameState.MENU && key === 'Enter' && pressed) {
+                startGame();
+            } else if (state === GameState.PLAYING && key === 'Escape' && pressed) {
+                state = GameState.PAUSED;
+            } else if (state === GameState.PAUSED && key === 'Escape' && pressed) {
+                state = GameState.PLAYING;
+            } else if (state === GameState.GAMEOVER && key === 'Enter' && pressed) {
+                startGame();
+            }
+        }
+
+        document.addEventListener('keydown', (e) => handleInput(e.key, true));
+        document.addEventListener('keyup', (e) => handleInput(e.key, false));
+
+        function startGame() {
+            state = GameState.PLAYING;
+            score = 0;
+            player.lives = 3;
+            player.x = canvas.width / 2 - 15;
+            player.doubleBulletTimer = 0;
+            enemies = [];
+            bullets = [];
+            powerUps = [];
+        }
+
+        function updatePlayer(deltaTime) {
+            if (keys['ArrowLeft'] || keys['a']) {
+                player.x -= player.speed;
+            }
+            if (keys['ArrowRight'] || keys['d']) {
+                player.x += player.speed;
+            }
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            if (keys[' '] || keys['ArrowUp']) {
+                shoot();
+            }
+            if (shootCooldown > 0) {
+                shootCooldown -= deltaTime;
+            }
+            if (player.doubleBulletTimer > 0) {
+                player.doubleBulletTimer -= deltaTime;
+            }
+        }
+
+        function shoot() {
+            if (shootCooldown <= 0) {
+                if (player.doubleBulletTimer > 0) {
+                    bullets.push({
+                        x: player.x + player.width / 4,
+                        y: player.y,
+                        width: 4,
+                        height: 10,
+                        speed: 8,
+                        direction: 'up',
+                        type: 'player'
+                    });
+                    bullets.push({
+                        x: player.x + player.width * 3/4,
+                        y: player.y,
+                        width: 4,
+                        height: 10,
+                        speed: 8,
+                        direction: 'up',
+                        type: 'player'
+                    });
+                } else {
+                    bullets.push({
+                        x: player.x + player.width / 2 - 2,
+                        y: player.y,
+                        width: 4,
+                        height: 10,
+                        speed: 8,
+                        direction: 'up',
+                        type: 'player'
+                    });
+                }
+                shootCooldown = shootInterval;
+            }
+        }
+
+        function updateEnemies(deltaTime) {
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                enemies[i].y += enemies[i].speed;
+                if (enemies[i].y > canvas.height) {
+                    enemies.splice(i, 1);
+                }
+            }
+        }
+
+        function spawnEnemies(deltaTime) {
+            enemySpawnTimer += deltaTime;
+            if (enemySpawnTimer >= enemySpawnInterval) {
+                enemySpawnTimer = 0;
+                let enemy = {
+                    x: Math.random() * (canvas.width - 30),
+                    y: -30,
+                    width: 30,
+                    height: 30,
+                    speed: 2 + Math.random() * 2,
+                    health: 1
+                };
+                enemies.push(enemy);
+            }
+        }
+
+        function updateBullets(deltaTime) {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                if (bullets[i].direction === 'up') {
+                    bullets[i].y -= bullets[i].speed;
+                } else {
+                    bullets[i].y += bullets[i].speed;
+                }
+                if (bullets[i].y < -10 || bullets[i].y > canvas.height + 10) {
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+
+        function updatePowerUps(deltaTime) {
+            for (let i = powerUps.length - 1; i >= 0; i--) {
+                powerUps[i].y += 2;
+                if (powerUps[i].y > canvas.height) {
+                    powerUps.splice(i, 1);
+                }
+            }
+        }
+
+        function checkCollisions() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                if (bullets[i].type === 'player') {
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        if (rectCollision(bullets[i], enemies[j])) {
+                            enemies[j].health--;
+                            if (enemies[j].health <= 0) {
+                                score += 10;
+                                if (Math.random() < 0.3) {
+                                    powerUps.push({
+                                        x: enemies[j].x + enemies[j].width / 2 - 10,
+                                        y: enemies[j].y,
+                                        width: 20,
+                                        height: 20,
+                                        type: 'doubleBullet'
+                                    });
+                                }
+                                enemies.splice(j, 1);
+                            }
+                            bullets.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+            }
+            for (let i = powerUps.length - 1; i >= 0; i--) {
+                if (rectCollision(player, powerUps[i])) {
+                    if (powerUps[i].type === 'doubleBullet') {
+                        player.doubleBulletTimer = 10;
+                    }
+                    powerUps.splice(i, 1);
+                }
+            }
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                if (rectCollision(player, enemies[i])) {
+                    player.lives--;
+                    enemies.splice(i, 1);
+                    if (player.lives <= 0) {
+                        state = GameState.GAMEOVER;
+                        if (score > highScore) {
+                            highScore = score;
+                            localStorage.setItem('highScore', highScore);
+                        }
+                    }
+                }
+            }
+        }
+
+        function rectCollision(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+
+        function drawPlayer() {
+            ctx.fillStyle = '#4fd1c5';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+        }
+
+        function drawEnemies() {
+            ctx.fillStyle = '#ff6b6b';
+            for (let enemy of enemies) {
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            }
+        }
+
+        function drawBullets() {
+            for (let bullet of bullets) {
+                ctx.fillStyle = bullet.type === 'player' ? '#4fd1c5' : '#ff6b6b';
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            }
+        }
+
+        function drawPowerUps() {
+            for (let powerUp of powerUps) {
+                ctx.fillStyle = '#ffd93d';
+                ctx.beginPath();
+                ctx.arc(powerUp.x + powerUp.width/2, powerUp.y + powerUp.height/2, powerUp.width/2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawScore() {
+            ctx.fillStyle = 'white';
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('得分: ' + score, canvas.width / 2, 30);
+            ctx.fillText('最高分: ' + highScore, canvas.width / 2, 60);
+        }
+
+        function drawLives() {
+            ctx.fillStyle = 'white';
+            ctx.font = '16px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText('生命: ' + player.lives, 10, 30);
+        }
+
+        function drawMenu() {
+            ctx.fillStyle = 'white';
+            ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('射击游戏', canvas.width / 2, canvas.height / 2 - 50);
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('按 Enter 开始游戏', canvas.width / 2, canvas.height / 2);
+            ctx.fillText('使用方向键移动，空格射击', canvas.width / 2, canvas.height / 2 + 40);
+        }
+
+        function drawPaused() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('游戏暂停', canvas.width / 2, canvas.height / 2);
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('按 Escape 继续', canvas.width / 2, canvas.height / 2 + 40);
+        }
+
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('游戏结束', canvas.width / 2, canvas.height / 2 - 50);
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('得分: ' + score, canvas.width / 2, canvas.height / 2);
+            ctx.fillText('最高分: ' + highScore, canvas.width / 2, canvas.height / 2 + 40);
+            ctx.fillText('按 Enter 重新开始', canvas.width / 2, canvas.height / 2 + 80);
+        }
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

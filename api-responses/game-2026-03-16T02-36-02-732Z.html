@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>贪食蛇</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(180deg, #0b1020, #10182e 45%, #0b1220);
+      color: #fff;
+      font-family: Arial, "Microsoft YaHei", sans-serif;
+      overflow: hidden;
+      height: 100%;
+      touch-action: manipulation;
+    }
+    .wrap {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 8px;
+    }
+    canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+      background: #0b1220;
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.45), inset 0 0 0 2px rgba(255,255,255,.06);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="game"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+
+    canvas.width = 360;
+    canvas.height = 640;
+
+    const W = canvas.width;
+    const H = canvas.height;
+
+    const GRID = 18;
+    const CELL = 18;
+    const BOARD_X = 18;
+    const BOARD_Y = 120;
+    const BOARD_W = GRID * CELL;  // 324
+    const BOARD_H = GRID * CELL;  // 324
+
+    const COLORS = {
+      bg1: '#0b1020',
+      bg2: '#15213d',
+      panel: 'rgba(255,255,255,0.07)',
+      panelStroke: 'rgba(255,255,255,0.12)',
+      gridA: '#17233f',
+      gridB: '#12203a',
+      snakeHead: '#7cff6b',
+      snakeBody: '#39d98a',
+      snakeBody2: '#25b56b',
+      food: '#ff5c7a',
+      foodGlow: 'rgba(255,92,122,0.35)',
+      text: '#eaf2ff',
+      subtext: '#9fb3d9',
+      accent: '#62d0ff',
+      gold: '#ffd76a',
+      danger: '#ff7b7b'
+    };
+
+    const state = {
+      mode: 'ready', // ready, playing, paused, gameover
+      snake: [],
+      dir: { x: 1, y: 0 },
+      nextDir: { x: 1, y: 0 },
+      food: { x: 10, y: 10, bonus: false, ttl: 0 },
+      score: 0,
+      best: Number(localStorage.getItem('snake_best_360x640') || 0),
+      steps: 0,
+      speed: 7.5,
+      moveTimer: 0,
+      particles: [],
+      flash: 0,
+      combo: 0,
+      bonusTimer: 0
+    };
+
+    function resetGame() {
+      state.mode = 'ready';
+      state.snake = [
+        { x: 6, y: 9 },
+        { x: 5, y: 9 },
+        { x: 4, y: 9 }
+      ];
+      state.dir = { x: 1, y: 0 };
+      state.nextDir = { x: 1, y: 0 };
+      state.score = 0;
+      state.steps = 0;
+      state.speed = 7.5;
+      state.moveTimer = 0;
+      state.particles = [];
+      state.flash = 0;
+      state.combo = 0;
+      state.bonusTimer = 0;
+      spawnFood();
+    }
+
+    function randInt(n) {
+      return Math.floor(Math.random() * n);
+    }
+
+    function cellOccupied(x, y) {
+      for (const s of state.snake) {
+        if (s.x === x && s.y === y) return true;
+      }
+      return false;
+    }
+
+    function spawnFood(forceBonus = false) {
+      let x, y;
+      do {
+        x = randInt(GRID);
+        y = randInt(GRID);
+      } while (cellOccupied(x, y));
+
+      const bonusChance = forceBonus || (state.score > 0 && state.score % 5 === 0 && Math.random() < 0.7);
+      state.food = {
+        x,
+        y,
+        bonus: bonusChance,
+        ttl: bonusChance ? 420 : 0
+      };
+    }
+
+    function startGame() {
+      if (state.mode === 'ready' || state.mode === 'gameover') {
+        resetGame();
+      }
+      state.mode = 'playing';
+    }
+
+    function togglePause() {
+      if (state.mode === 'playing') state.mode = 'paused';
+      else if (state.mode === 'paused') state.mode = 'playing';
+    }
+
+    function setDirection(x, y) {
+      if (state.mode === 'ready') state.mode = 'playing';
+      if (state.mode !== 'playing') return;
+      if (x === -state.dir.x && y === -state.dir.y) return;
+      state.nextDir = { x, y };
+    }
+
+    function handleInput(key) {
+      if (key === 'ArrowUp' || key === 'w' || key === 'W') setDirection(0, -1);
+      else if (key === 'ArrowDown' || key === 's' || key === 'S') setDirection(0, 1);
+      else if (key === 'ArrowLeft' || key === 'a' || key === 'A') setDirection(-1, 0);
+      else if (key === 'ArrowRight' || key === 'd' || key === 'D') setDirection(1, 0);
+      else if (key === ' ' || key === 'Enter') {
+        if (state.mode === 'ready' || state.mode === 'gameover') startGame();
+        else togglePause();
+      }
+      else if (key === 'p' || key === 'P') {
+        if (state.mode === 'playing' || state.mode === 'paused') togglePause();
+      }
+      else if (key === 'r' || key === 'R') {
+        resetGame();
+      }
+    }
+
+    window.addEventListener('keydown', (e) => {
+      const keys = ['ArrowUp','ArrowDown','ArrowLeft','ArrowRight','w','W','a','A','s','S','d','D',' ','Enter','p','P','r','R'];
+      if (keys.includes(e.key)) e.preventDefault();
+      handleInput(e.key);
+    });
+
+    let touchStartX = 0;
+    let touchStartY = 0;
+    canvas.addEventListener('touchstart', (e) => {
+      const t = e.touches[0];
+      touchStartX = t.clientX;
+      touchStartY = t.clientY;
+    }, { passive: true });
+
+    canvas.addEventListener('touchend', (e) => {
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touchStartX;
+      const dy = t.clientY - touchStartY;
+      const adx = Math.abs(dx);
+      const ady = Math.abs(dy);
+
+      if (adx < 18 && ady < 18) {
+        if (state.mode === 'ready' || state.mode === 'gameover') startGame();
+        else togglePause();
+        return;
+      }
+
+      if (adx > ady) {
+        if (dx > 0) setDirection(1, 0);
+        else setDirection(-1, 0);
+      } else {
+        if (dy > 0) setDirection(0, 1);
+        else setDirection(0, -1);
+      }
+    }, { passive: true });
+
+    canvas.addEventListener('click', () => {
+      if (state.mode === 'ready' || state.mode === 'gameover') startGame();
+    });
+
+    function addParticles(cx, cy, color, count = 12) {
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 30 + Math.random() * 80;
+        state.particles.push({
+          x: cx,
+          y: cy,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp,
+          life: 0.35 + Math.random() * 0.35,
+          maxLife: 0.35 + Math.random() * 0.35,
+          r: 2 + Math.random() * 3,
+          color
+        });
+      }
+    }
+
+    function update(dt) {
+      if (state.flash > 0) state.flash -= dt * 2.2;
+      state.flash = Math.max(0, state.flash);
+
+      for (let i = state.particles.length - 1; i >= 0; i--) {
+        const p = state.particles[i];
+        p.life -= dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 80 * dt;
+        if (p.life <= 0) state.particles.splice(i, 1);
+      }
+
+      if (state.mode !== 'playing') return;
+
+      if (state.food.bonus) {
+        state.food.ttl -= dt * 60;
+        if (state.food.ttl <= 0) {
+          spawnFood(false);
+        }
+      }
+
+      state.speed = Math.min(14, 7.5 + state.score * 0.22);
+      state.moveTimer += dt;
+
+      const stepTime = 1 / state.speed;
+      while (state.moveTimer >= stepTime) {
+        state.moveTimer -= stepTime;
+        stepSnake();
+      }
+    }
+
+    function stepSnake() {
+      state.dir = { ...state.nextDir };
+
+      const head = state.snake[0];
+      const nx = head.x + state.dir.x;
+      const ny = head.y + state.dir.y;
+
+      if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) {
+        gameOver();
+        return;
+      }
+
+      const grow = nx === state.food.x && ny === state.food.y;
+      const bodyCheckLength = grow ? state.snake.length : state.snake.length - 1;
+      for (let i = 0; i < bodyCheckLength; i++) {
+        if (state.snake[i].x === nx && state.snake[i].y === ny) {
+          gameOver();
+          return;
+        }
+      }
+
+      state.snake.unshift({ x: nx, y: ny });
+
+      if (grow) {
+        const center = gridToPixel(nx, ny);
+        if (state.food.bonus) {
+          state.score += 3;
+          state.combo++;
+          state.flash = 1;
+          addParticles(center.x, center.y, COLORS.gold, 18);
+        } else {
+          state.score += 1;
+          state.combo = 0;
+          addParticles(center.x, center.y, COLORS.food, 12);
+        }
+        if (state.score > state.best) {
+          state.best = state.score;
+          localStorage.setItem('snake_best_360x640', state.best);
+        }
+        spawnFood();
+      } else {
+        state.snake.pop();
+      }
+
+      state.steps++;
+    }
+
+    function gameOver() {
+      state.mode = 'gameover';
+      state.flash = 1;
+      const h = state.snake[0];
+      const center = gridToPixel(h.x, h.y);
+      addParticles(center.x, center.y, COLORS.danger, 24);
+    }
+
+    function roundRect(x, y, w, h, r, fill, stroke) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.arcTo(x + w, y, x + w, y + h, r);
+      ctx.arcTo(x + w, y + h, x, y + h, r);
+      ctx.arcTo(x, y + h, x, y, r);
+      ctx.arcTo(x, y, x + w, y, r);
+      if (fill) ctx.fill();
+      if (stroke) ctx.stroke();
+    }
+
+    function gridToPixel(gx, gy) {
+      return {
+        x: BOARD_X + gx * CELL + CELL / 2,
+        y: BOARD_Y + gy * CELL + CELL / 2
+      };
+    }
+
+    function drawBackground() {
+      const grad = ctx.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, COLORS.bg1);
+      grad.addColorStop(1, COLORS.bg2);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, W, H);
+
+      for (let i = 0; i < 20; i++) {
+        const x = (i * 73) % W;
+        const y = (i * 137) % H;
+        ctx.fillStyle = 'rgba(255,255,255,0.025)';
+        ctx.beginPath();
+        ctx.arc(x, y, 1 + (i % 3), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function drawUI() {
+      ctx.fillStyle = COLORS.text;
+      ctx.font = 'bold 28px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText('贪食蛇', 18, 40);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+      ctx.lineWidth = 1;
+      roundRect(18, 56, 156, 48, 12, true, true);
+      roundRect(186, 56, 156, 48, 12, true, true);
+
+      ctx.fillStyle = COLORS.subtext;
+      ctx.font = '14px Arial';
+      ctx.fillText('得分', 32, 76);
+      ctx.fillText('最高分', 200, 76);
+
+      ctx.fillStyle = COLORS.text;
+      ctx.font = 'bold 22px Arial';
+      ctx.fillText(String(state.score), 32, 96);
+      ctx.fillText(String(state.best), 200, 96);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+      roundRect(18, 458, 324, 164, 14, true, true);
+
+      ctx.fillStyle = COLORS.subtext;
+      ctx.font = '14px Arial';
+      ctx.textAlign = 'left';
+      ctx.fillText('操作：方向键 / WASD / 滑动', 30, 488);
+      ctx.fillText('空格/回车：开始或暂停', 30, 510);
+      ctx.fillText('吃到粉色食物 +1，金色奖励 +3', 30, 532);
+
+      ctx.fillStyle = COLORS.accent;
+      ctx.font = 'bold 15px Arial';
+      ctx.fillText('当前速度：' + state.speed.toFixed(1), 30, 560);
+
+      if (state.food.bonus) {
+        ctx.fillStyle = COLORS.gold;
+        const sec = Math.max(0, (state.food.ttl / 60)).toFixed(1);
+        ctx.fillText('奖励食物剩余：' + sec + 's', 30, 584);
+      } else {
+        ctx.fillStyle = COLORS.subtext;
+        ctx.fillText('坚持更久，速度会逐步提升', 30, 584);
+      }
+
+      ctx.textAlign = 'center';
+      if (state.mode === 'ready') {
+        drawCenterMessage('点击或按空格开始', '滑动屏幕控制方向');
+      } else if (state.mode === 'paused') {
+        drawCenterMessage('已暂停', '点击、空格或回车继续');
+      } else if (state.mode === 'gameover') {
+        drawCenterMessage('游戏结束', '点击重新开始');
+      }
+    }
+
+    function drawCenterMessage(title, subtitle) {
+      ctx.save();
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      roundRect(44, 250, 272, 100, 16, true, false);
+
+      ctx.textAlign = 'center';
+      ctx.fillStyle = COLORS.text;
+      ctx.font = 'bold 26px Arial';
+      ctx.fillText(title, W / 2, 290);
+
+      ctx.fillStyle = COLORS.subtext;
+      ctx.font = '16px Arial';
+      ctx.fillText(subtitle, W / 2, 320);
+      ctx.restore();
+    }
+
+    function drawBoard() {
+      ctx.save();
+      ctx.fillStyle = '#0e1730';
+      ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+      ctx.lineWidth = 2;
+      roundRect(BOARD_X - 6, BOARD_Y - 6, BOARD_W + 12, BOARD_H + 12, 16, true, true);
+
+      for (let y = 0; y < GRID; y++) {
+        for (let x = 0; x < GRID; x++) {
+          ctx.fillStyle = (x + y) % 2 === 0 ? COLORS.gridA : COLORS.gridB;
+          ctx.fillRect(BOARD_X + x * CELL, BOARD_Y + y * CELL, CELL, CELL);
+        }
+      }
+
+      const fx = BOARD_X + state.food.x * CELL + CELL / 2;
+      const fy = BOARD_Y + state.food.y * CELL + CELL / 2;
+
+      ctx.save();
+      ctx.shadowBlur = state.food.bonus ? 18 : 12;
+      ctx.shadowColor = state.food.bonus ? COLORS.gold : COLORS.foodGlow;
+      ctx.fillStyle = state.food.bonus ? COLORS.gold : COLORS.food;
+      ctx.beginPath();
+      ctx.arc(fx, fy, state.food.bonus ? 7 : 6, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(255,255,255,0.5)';
+      ctx.beginPath();
+      ctx.arc(fx - 2, fy - 2, 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+
+      for (let i = state.snake.length - 1; i >= 0; i--) {
+        const s = state.snake[i];
+        const px = BOARD_X + s.x * CELL;
+        const py = BOARD_Y + s.y * CELL;
+        const isHead = i === 0;
+
+        ctx.save();
+        if (isHead) {
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = 'rgba(124,255,107,0.35)';
+        }
+        ctx.fillStyle = isHead
+          ? COLORS.snakeHead
+          : (i % 2 === 0 ? COLORS.snakeBody : COLORS.snakeBody2);
+        roundRect(px + 1.5, py + 1.5, CELL - 3, CELL - 3, 5, true, false);
+
+        if (isHead) {
+          const cx = px + CELL / 2;
+          const cy = py + CELL / 2;
+          let ex1 = cx - 4, ey1 = cy - 3, ex2 = cx + 4, ey2 = cy - 3;
+          if (state.dir.x === 1) { ex1 = cx + 2; ey1 = cy - 4; ex2 = cx + 2; ey2 = cy + 4; }
+          else if (state.dir.x === -1) { ex1 = cx - 2; ey1 = cy - 4; ex2 = cx - 2; ey2 = cy + 4; }
+          else if (state.dir.y === 1) { ex1 = cx - 4; ey1 = cy + 2; ex2 = cx + 4; ey2 = cy + 2; }
+          else if (state.dir.y === -1) { ex1 = cx - 4; ey1 = cy - 2; ex2 = cx + 4; ey2 = cy - 2; }
+
+          ctx.fillStyle = '#102010';
+          ctx.beginPath(); ctx.arc(ex1, ey1, 1.6, 0, Math.PI * 2); ctx.fill();
+          ctx.beginPath(); ctx.arc(ex2, ey2, 1.6, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      for (const p of state.particles) {
+        const a = Math.max(0, p.life / p.maxLife);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    function drawFlash() {
+      if (state.flash <= 0) return;
+      ctx.fillStyle = `rgba(255,255,255,${0.08 * state.flash})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    function draw() {
+      drawBackground();
+      drawUI();
+      drawBoard();
+      drawFlash();
+    }
+
+    let last = 0;
+    function gameLoop(ts) {
+      const dt = Math.min(0.033, (ts - last) / 1000 || 0);
+      last = ts;
+      update(dt);
+      draw();
+      requestAnimationFrame(gameLoop);
+    }
+
+    resetGame();
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>

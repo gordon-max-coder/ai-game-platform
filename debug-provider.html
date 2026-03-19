@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 调试 Provider 判断</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #4CAF50;
+            padding-bottom: 10px;
+        }
+        .test-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .model-item {
+            padding: 10px;
+            margin: 5px 0;
+            border-left: 4px solid #2196F3;
+            background: #e3f2fd;
+        }
+        .success {
+            color: #4CAF50;
+            font-weight: bold;
+        }
+        .error {
+            color: #f44336;
+            font-weight: bold;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        pre {
+            background: #282c34;
+            color: #abb2bf;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 调试 Provider 判断逻辑</h1>
+    
+    <div class="test-section">
+        <h2>📊 当前配置</h2>
+        <div id="currentConfig"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>🧪 测试 Provider 判断</h2>
+        <button onclick="runTests()">▶️ 运行测试</button>
+        <div id="testResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>📝 手动测试</h2>
+        <input type="text" id="modelInput" placeholder="输入模型名称" value="xiaomi/mimo-v2-pro" style="width: 300px; padding: 8px;">
+        <button onclick="testModel()">测试</button>
+        <div id="manualResult"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>💡 使用说明</h2>
+        <ol>
+            <li>点击"运行测试"查看自动测试结果</li>
+            <li>在"手动测试"中输入模型名称测试</li>
+            <li>确认 <code>xiaomi/mimo-v2-pro</code> 被判断为 <code>openrouter</code></li>
+            <li>如果正确，刷新 <code>create.html</code> 并测试</li>
+        </ol>
+    </div>
+
+    <script>
+        // Provider 判断逻辑（与 create-new.js 相同）
+        function getProvider(modelName) {
+            const provider = modelName.includes('openrouter') || modelName.includes('xiaomi/mimo-v2-pro') ? 'openrouter' : 
+                            (modelName.includes('qwen') ? 'aliyun' : 'jiekou');
+            return provider;
+        }
+        
+        // 显示当前配置
+        function showCurrentConfig() {
+            const config = {
+                'xiaomi/mimo-v2-pro': 'openrouter',
+                'openrouter/hunter-alpha': 'openrouter',
+                'xiaomi/mimo-v2-flash': 'jiekou',
+                'claude-sonnet-4-6': 'jiekou',
+                'gpt-5.4': 'jiekou',
+                'gemini-2.5-flash': 'jiekou',
+                'qwen-plus': 'aliyun'
+            };
+            
+            let html = '<table style="width: 100%; border-collapse: collapse;">';
+            html += '<tr><th style="text-align: left;">模型</th><th>预期厂商</th><th>判断结果</th><th>状态</th></tr>';
+            
+            for (const [model, expected] of Object.entries(config)) {
+                const actual = getProvider(model);
+                const status = actual === expected ? '✅' : '❌';
+                const statusClass = actual === expected ? 'success' : 'error';
+                
+                html += `<tr>
+                    <td style="padding: 8px; border-bottom: 1px solid #ddd;">${model}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #ddd;">${expected}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #ddd;">${actual}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid #ddd;" class="${statusClass}">${status}</td>
+                </tr>`;
+            }
+            
+            html += '</table>';
+            document.getElementById('currentConfig').innerHTML = html;
+        }
+        
+        // 运行所有测试
+        function runTests() {
+            const tests = [
+                { model: 'xiaomi/mimo-v2-pro', expected: 'openrouter' },
+                { model: 'openrouter/hunter-alpha', expected: 'openrouter' },
+                { model: 'xiaomi/mimo-v2-flash', expected: 'jiekou' },
+                { model: 'claude-sonnet-4-6', expected: 'jiekou' },
+                { model: 'gpt-5.4', expected: 'jiekou' },
+                { model: 'gemini-2.5-flash', expected: 'jiekou' },
+                { model: 'qwen-plus', expected: 'aliyun' }
+            ];
+            
+            let passed = 0;
+            let failed = 0;
+            let html = '';
+            
+            for (const test of tests) {
+                const actual = getProvider(test.model);
+                const success = actual === test.expected;
+                
+                if (success) passed++;
+                else failed++;
+                
+                html += `<div class="model-item" style="border-left-color: ${success ? '#4CAF50' : '#f44336'}; background: ${success ? '#e8f5e9' : '#ffebee'};">
+                    <strong>${test.model}</strong><br>
+                    预期：${test.expected} | 
+                    实际：${actual} | 
+                    <span class="${success ? 'success' : 'error'}">${success ? '✅ 通过' : '❌ 失败'}</span>
+                </div>`;
+            }
+            
+            html += `<p><strong>总计：${passed} 通过，${failed} 失败</strong></p>`;
+            document.getElementById('testResults').innerHTML = html;
+        }
+        
+        // 手动测试
+        function testModel() {
+            const model = document.getElementById('modelInput').value.trim();
+            if (!model) {
+                document.getElementById('manualResult').innerHTML = '<p class="error">请输入模型名称</p>';
+                return;
+            }
+            
+            const provider = getProvider(model);
+            document.getElementById('manualResult').innerHTML = `
+                <div class="model-item">
+                    <strong>模型:</strong> ${model}<br>
+                    <strong>判断结果:</strong> <span class="success">${provider}</span>
+                </div>
+            `;
+        }
+        
+        // 页面加载时显示配置
+        showCurrentConfig();
+        
+        // 自动运行测试
+        setTimeout(runTests, 500);
+    </script>
+</body>
+</html>

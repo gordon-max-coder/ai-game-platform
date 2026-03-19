@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click Master</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #1a1a2e; /* Fallback for browsers that don't support gradients */
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            color: #ffffff;
+        }
+
+        canvas {
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            display: block; /* Remove extra space below canvas */
+        }
+
+        /* Basic button styling (will be drawn on canvas for consistency) */
+        .game-button {
+            position: absolute;
+            padding: 10px 20px;
+            font-size: 18px;
+            color: #ffffff;
+            background-color: #4fd1c5; /* Accent color */
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            display: none; /* Hidden by default, canvas will manage visibility */
+        }
+
+        .game-button:hover {
+            background-color: #3aa099;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="360" height="640"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game State
+        const GAME_STATES = {
+            MENU: 'menu',
+            PLAYING: 'playing',
+            PAUSED: 'paused',
+            GAMEOVER: 'gameover'
+        };
+        let gameState = GAME_STATES.MENU;
+
+        // Game Variables
+        let score = 0;
+        let highScore = localStorage.getItem('clickMasterHighScore') || 0;
+        let gameTime = 30; // seconds
+        let timeLeft = gameTime;
+        let lastFrameTime = 0;
+        let targetInterval = 1000; // Time between new targets appearing (ms)
+        let lastTargetSpawnTime = 0;
+
+        const targets = [];
+        const TARGET_SIZE = 60;
+        const TARGET_LIFETIME = 1500; // ms
+        const TARGET_SPAWN_DECAY_RATE = 0.95; // How much faster targets spawn over time
+        const MIN_TARGET_INTERVAL = 400; // Minimum interval between targets
+
+        // UI Colors
+        const UI_TEXT_COLOR = '#ffffff';
+        const UI_ACCENT_COLOR = '#4fd1c5';
+        const UI_BUTTON_COLOR = '#4fd1c5';
+        const UI_BUTTON_HOVER_COLOR = '#3aa099';
+        const UI_BACKGROUND_GRADIENT = ['#1a1a2e', '#16213e'];
+
+        // Game loop
+        function gameLoop(currentTime) {
+            const deltaTime = currentTime - lastFrameTime;
+            lastFrameTime = currentTime;
+
+            update(deltaTime);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Game Logic Update ---
+        function update(deltaTime) {
+            switch (gameState) {
+                case GAME_STATES.MENU:
+                    // No active game logic in menu
+                    break;
+                case GAME_STATES.PLAYING:
+                    timeLeft -= deltaTime / 1000; // Decrease time left
+
+                    if (timeLeft <= 0) {
+                        gameState = GAME_STATES.GAMEOVER;
+                        timeLeft = 0; // Ensure it doesn't go negative
+                        if (score > highScore) {
+                            highScore = score;
+                            localStorage.setItem('clickMasterHighScore', highScore);
+                        }
+                    }
+
+                    // Spawn new targets
+                    lastTargetSpawnTime += deltaTime;
+                    if (lastTargetSpawnTime >= targetInterval) {
+                        spawnTarget();
+                        lastTargetSpawnTime = 0;
+                        // Gradually make targets appear faster
+                        targetInterval = Math.max(MIN_TARGET_INTERVAL, targetInterval * TARGET_SPAWN_DECAY_RATE);
+                    }
+
+                    // Update and remove targets
+                    for (let i = targets.length - 1; i >= 0; i--) {
+                        const target = targets[i];
+                        target.lifetime -= deltaTime;
+                        if (target.lifetime <= 0) {
+                            targets.splice(i, 1);
+                            score = Math.max(0, score - 1); // Penalty for missing
+                        }
+                    }
+                    break;
+                case GAME_STATES.PAUSED:
+                    // No active game logic when paused
+                    break;
+                case GAME_STATES.GAMEOVER:
+                    // No active game logic after game over
+                    break;
+            }
+        }
+
+        // --- Game Rendering ---
+        function render() {
+            // Draw background
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, UI_BACKGROUND_GRADIENT[0]);
+            gradient.addColorStop(1, UI_BACKGROUND_GRADIENT[1]);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw Score
+            ctx.font = '24px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = UI_TEXT_COLOR;
+            ctx.fillText('Score:', canvas.width / 2 - 40, 40);
+            ctx.fillStyle = UI_ACCENT_COLOR;
+            ctx.fillText(score, canvas.width / 2 + 30, 40);
+
+            // Draw High Score (always visible)
+            ctx.font = '16px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = UI_TEXT_COLOR;
+            ctx.fillText('High Score: ' + highScore, canvas.width / 2, 70);
+
+            switch (gameState) {
+                case GAME_STATES.MENU:
+                    drawMenu();
+                    break;
+                case GAME_STATES.PLAYING:
+                    drawPlaying();
+                    break;
+                case GAME_STATES.PAUSED:
+                    drawPlaying(); // Still show game elements
+                    drawPausedOverlay();
+                    break;
+                case GAME_STATES.GAMEOVER:
+                    drawPlaying(); // Still show game elements
+                    drawGameOver();
+                    break;
+            }
+        }
+
+        function drawMenu() {
+            ctx.font = '48px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = UI_TEXT_COLOR;
+            ctx.fillText('Click Master', canvas.width / 2, canvas.height / 3);
+
+            drawButton(canvas.width / 2, canvas.height / 2, 120, 50, 'Start Game', startGame);
+        }
+
+        function drawPlaying() {
+            // Draw targets
+            targets.forEach(target => {
+                ctx.fillStyle = UI_ACCENT_COLOR;
+                ctx.globalAlpha = target.lifetime / TARGET_LIFETIME; // Fade out
+                ctx.beginPath();
+                ctx.roundRect(target.x, target.y, TARGET_SIZE, TARGET_SIZE, 12);
+                ctx.fill();
+                ctx.globalAlpha = 1; // Reset alpha
+            });
+
+            // Draw Time Left
+            ctx.font = '20px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillStyle = UI_TEXT_COLOR;
+            ctx.fillText('Time: ' + Math.ceil(timeLeft), canvas.width - 20, 40);
+
+            // Draw Pause button
+            drawButton(canvas.width - 50, canvas.height - 40, 80, 40, 'Pause', pauseGame, 'small');
+        }
+
+        function drawPausedOverlay() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Semi-transparent overlay
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.font = '40px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = UI_TEXT_COLOR;
+            ctx.fillText('Paused', canvas.width / 2, canvas.height / 3);
+
+            drawButton(canvas.width / 2, canvas.height / 2, 120, 50, 'Resume', resumeGame);
+        }
+
+        function drawGameOver() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Semi-transparent overlay
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.font = '40px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillStyle = UI_TEXT_COLOR;
+            ctx.fillText('Game Over!', canvas.width / 2, canvas.height / 3);
+
+            ctx.font = '24px "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.fillText('Your Score: ' + score, canvas.width / 2, canvas.height / 3 + 60);
+
+            drawButton(canvas.width / 2, canvas.height / 2 + 50, 150, 50, 'Play Again', resetGame);
+        }
+
+        // Helper function to draw a button on canvas
+        function drawButton(x, y, width, height, text, onClickCallback, size = 'normal') {
+            const buttonX = x - width / 2;
+            const buttonY = y - height / 2;
+
+            ctx.fillStyle = UI_BUTTON_COLOR;
+            ctx.beginPath();
+            ctx.roundRect(buttonX, buttonY, width, height, 12);
+            ctx.fill();
+
+            // Add shadow
+            ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+            ctx.shadowBlur = 8;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = 4;
+            ctx.fill();
+            ctx.shadowBlur = 0; // Reset shadow
+
+            ctx.fillStyle = UI_TEXT_COLOR;
+            ctx.font = (size === 'small' ? '16px' : '20px') + ' "PingFang SC", "Microsoft YaHei", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(text, x, y);
+
+            // Store button data for click detection
+            buttons.push({ x: buttonX, y: buttonY, width: width, height: height, callback: onClickCallback });
+        }
+        const buttons = []; // Array to store clickable button regions for event handling
+
+        // --- Input Handling ---
+        function handleInput(event) {
+            if (event.type === 'mousedown' || event.type === 'touchstart') {
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const clientX = event.type === 'mousedown' ? event.clientX : event.touches[0].clientX;
+                const clientY = event.type === 'mousedown' ? event.clientY : event.touches[0].clientY;
+                const mouseX = (clientX - rect.left) * scaleX;
+                const mouseY = (clientY - rect.top) * scaleY;
+
+                // Check for button clicks first
+                for (let i = buttons.length - 1; i >= 0; i--) {
+                    const btn = buttons[i];
+                    if (mouseX > btn.x && mouseX < btn.x + btn.width &&
+                        mouseY > btn.y && mouseY < btn.y + btn.height) {
+                        btn.callback();
+                        buttons.length = 0; // Clear buttons after click to prevent multiple triggers
+                        return; // Button was clicked, don't check targets
+                    }
+                }
+                buttons.length = 0; // Clear buttons after rendering cycle
+
+                // If no button clicked, check for target clicks (only in playing state)
+                if (gameState === GAME_STATES.PLAYING) {
+                    for (let i = targets.length - 1; i >= 0; i--) {
+                        const target = targets[i];
+                        if (mouseX > target.x && mouseX < target.x + TARGET_SIZE &&
+                            mouseY > target.y && mouseY < target.y + TARGET_SIZE) {
+                            score++;
+                            targets.splice(i, 1); // Remove clicked target
+                            break; // Only click one target at a time
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- Game State Transitions / Actions ---
+        function startGame() {
+            resetGameData();
+            gameState = GAME_STATES.PLAYING;
+            lastTargetSpawnTime = 0; // Reset spawn timer
+            lastFrameTime = performance.now(); // Reset time for smooth start
+        }
+
+        function pauseGame() {
+            if (gameState === GAME_STATES.PLAYING) {
+                gameState = GAME_STATES.PAUSED;
+            }
+        }
+
+        function resumeGame() {
+            if (gameState === GAME_STATES.PAUSED) {
+                gameState = GAME_STATES.PLAYING;
+                lastFrameTime = performance.now(); // Reset lastFrameTime to prevent large deltaTime after pause
+            }
+        }
+
+        function resetGame() {
+            resetGameData();
+            gameState = GAME_STATES.MENU;
+        }
+
+        function resetGameData() {
+            score = 0;
+            timeLeft = gameTime;
+            targets.length = 0; // Clear all targets
+            targetInterval = 1000; // Reset target spawn rate
+        }
+
+        function spawnTarget() {
+            const x = Math.random() * (canvas.width - TARGET_SIZE);
+            const y = Math.random() * (canvas.height - TARGET_SIZE - 100) + 100; // Avoid top score area
+            targets.push({ x, y, lifetime: TARGET_LIFETIME });
+        }
+
+
+        // Event Listeners
+        canvas.addEventListener('mousedown', handleInput);
+        canvas.addEventListener('touchstart', handleInput, { passive: true }); // Use passive for touch events for better performance
+
+        // Start the game loop
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

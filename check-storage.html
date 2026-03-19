@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>检查游戏数据</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .game-card {
+            background: #2a2a2a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .game-card h3 {
+            margin: 0 0 10px 0;
+            color: #7CFF7A;
+        }
+        .info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .info-item {
+            background: #333;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .label {
+            color: #888;
+            font-size: 12px;
+        }
+        .value {
+            color: #fff;
+            font-weight: bold;
+        }
+        .conversation-list {
+            background: #111;
+            padding: 10px;
+            border-radius: 4px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .conversation-item {
+            padding: 8px;
+            margin-bottom: 8px;
+            border-left: 3px solid #42a5ff;
+            background: #1a1a1a;
+        }
+        .conversation-item.user {
+            border-left-color: #7CFF7A;
+        }
+        .conversation-item.assistant {
+            border-left-color: #42a5ff;
+        }
+        .conversation-item .role {
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+        .conversation-item .content {
+            font-size: 13px;
+            color: #ccc;
+            white-space: pre-wrap;
+            max-height: 100px;
+            overflow: hidden;
+        }
+        .empty {
+            color: #ff5a5f;
+            font-style: italic;
+        }
+        button {
+            background: #42a5ff;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #5ab5ff;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 检查游戏数据存储</h1>
+        <div style="margin-bottom: 20px;">
+            <button onclick="checkStorage()">🔄 刷新数据</button>
+            <button onclick="exportData()">💾 导出数据</button>
+            <button onclick="clearStorage()">⚠️ 清空存储</button>
+        </div>
+        <div id="gamesList"></div>
+    </div>
+
+    <script>
+        function safeGetStorage() {
+            try {
+                const data = localStorage.getItem('aiGames');
+                return data ? JSON.parse(data) : [];
+            } catch (e) {
+                console.error('读取存储失败:', e);
+                return [];
+            }
+        }
+
+        function checkStorage() {
+            const games = safeGetStorage();
+            const container = document.getElementById('gamesList');
+            
+            if (games.length === 0) {
+                container.innerHTML = '<div class="game-card"><p class="empty">❌ 没有找到任何游戏数据</p></div>';
+                return;
+            }
+
+            container.innerHTML = `<div class="game-card"><p>✅ 找到 ${games.length} 个游戏</p></div>`;
+
+            games.forEach((game, index) => {
+                const hasHistory = game.conversationHistory && game.conversationHistory.length > 0;
+                const historyCount = game.conversationHistory?.length || 0;
+                
+                const card = document.createElement('div');
+                card.className = 'game-card';
+                
+                card.innerHTML = `
+                    <h3>${index + 1}. ${game.title || '未命名游戏'}</h3>
+                    <div class="info">
+                        <div class="info-item">
+                            <div class="label">游戏 ID</div>
+                            <div class="value" style="font-size: 11px;">${game.id}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="label">版本</div>
+                            <div class="value">v${game.version || 1}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="label">代码长度</div>
+                            <div class="value">${game.code?.length || 0} 字符</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="label">对话历史</div>
+                            <div class="value" style="color: ${hasHistory ? '#7CFF7A' : '#ff5a5f'}">
+                                ${hasHistory ? '✅ ' + historyCount + ' 条' : '❌ 无记录'}
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <div class="label">创建时间</div>
+                            <div class="value">${new Date(game.createdAt).toLocaleString('zh-CN')}</div>
+                        </div>
+                        <div class="info-item">
+                            <div class="label">更新时间</div>
+                            <div class="value">${new Date(game.updatedAt).toLocaleString('zh-CN')}</div>
+                        </div>
+                    </div>
+                    
+                    ${hasHistory ? `
+                        <div class="label">对话历史详情:</div>
+                        <div class="conversation-list">
+                            ${game.conversationHistory.map((item, i) => `
+                                <div class="conversation-item ${item.role}">
+                                    <div class="role">${item.role === 'user' ? '👤 用户' : '🤖 AI'} - ${new Date(item.timestamp).toLocaleString('zh-CN')}</div>
+                                    <div class="content">${escapeHtml(item.content.substring(0, 200))}${item.content.length > 200 ? '...' : ''}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    ` : '<div class="empty">⚠️ 这个游戏没有保存对话历史</div>'}
+                    
+                    <div style="margin-top: 10px;">
+                        <button onclick="editGame('${game.id}')">✏️ 编辑这个游戏</button>
+                        <button onclick="viewCode(${index})">📄 查看代码</button>
+                    </div>
+                `;
+                
+                container.appendChild(card);
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function exportData() {
+            const games = safeGetStorage();
+            const dataStr = JSON.stringify(games, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ai-games-backup-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function clearStorage() {
+            if (confirm('⚠️ 确定要清空所有游戏数据吗？此操作不可恢复！')) {
+                localStorage.removeItem('aiGames');
+                alert('✅ 已清空所有数据');
+                checkStorage();
+            }
+        }
+
+        function editGame(gameId) {
+            window.location.href = `create.html?edit=${gameId}`;
+        }
+
+        function viewCode(index) {
+            const games = safeGetStorage();
+            const game = games[index];
+            if (game && game.code) {
+                const win = window.open('', '_blank');
+                win.document.write('<pre style="white-space: pre-wrap; word-wrap: break-word;">' + escapeHtml(game.code) + '</pre>');
+            }
+        }
+
+        // 页面加载时检查
+        checkStorage();
+    </script>
+</body>
+</html>

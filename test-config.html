@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>API Config Test</title>
+</head>
+<body>
+    <h1>API 配置测试</h1>
+    <div id="result"></div>
+    
+    <script src="js/api-config.js"></script>
+    <script>
+        setTimeout(() => {
+            const result = document.getElementById('result');
+            result.innerHTML = `
+                <h2>API_CONFIG.model = "${window.API_CONFIG?.model}"</h2>
+                <p>如果显示 <code>meta-llama/llama-4-maverick-17b-128e-instruct-fp8</code> 则配置正确 ✅</p>
+                <p>如果显示 <code>claude-opus-4-6</code> 或 undefined 则配置错误 ❌</p>
+                <hr>
+                <button onclick="testGenerate()">测试生成请求</button>
+                <pre id="testResult"></pre>
+            `;
+        }, 1000);
+        
+        async function testGenerate() {
+            const result = document.getElementById('testResult');
+            result.textContent = '发送请求中...';
+            
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        model: window.API_CONFIG.model,
+                        messages: [
+                            {role: 'system', content: '你是游戏开发助手'},
+                            {role: 'user', content: '创建一个 Pong 游戏，只要最基本的功能'}
+                        ],
+                        max_tokens: 100
+                    })
+                });
+                
+                const data = await response.json();
+                result.textContent = '请求模型：' + (data.model || '未知') + '\n\n' + 
+                                   '完整响应:\n' + JSON.stringify(data, null, 2).substring(0, 500);
+            } catch (error) {
+                result.textContent = '错误：' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

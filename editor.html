@@ -1,0 +1,973 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎮 Godot Web Editor - AI Game Platform</title>
+    <style>
+        :root {
+            --bg-dark: #202531;
+            --bg-panel: #2b303b;
+            --bg-header: #1a1d26;
+            --border-color: #3d424d;
+            --text-primary: #e8e8e8;
+            --text-secondary: #a0a0a0;
+            --accent-blue: #4a9eff;
+            --accent-green: #4ade80;
+            --accent-red: #f87171;
+            --godot-blue: #478cbf;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-dark);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 16px;
+            background: var(--bg-header);
+            border-bottom: 1px solid var(--border-color);
+            height: 50px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .toolbar button {
+            padding: 6px 12px;
+            background: var(--bg-panel);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-primary);
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.2s;
+        }
+
+        .toolbar button:hover {
+            background: var(--godot-blue);
+            border-color: var(--godot-blue);
+        }
+
+        .toolbar button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .status-indicator.connected {
+            background: var(--accent-green);
+        }
+
+        .status-indicator.disconnected {
+            background: var(--accent-red);
+        }
+
+        /* Main Content */
+        .editor-container {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 280px 1fr 300px;
+            overflow: hidden;
+        }
+
+        /* Panels */
+        .panel {
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .right-panel {
+            border-left: 1px solid var(--border-color);
+            border-right: none;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: var(--bg-header);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .panel-header h3 {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .panel-footer {
+            padding: 10px;
+            border-top: 1px solid var(--border-color);
+        }
+
+        /* Viewport */
+        .viewport-panel {
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-dark);
+        }
+
+        .viewport-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background: var(--bg-header);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .viewport-content {
+            flex: 1;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #gameCanvas {
+            background: #000;
+            max-width: 100%;
+            max-height: 100%;
+        }
+
+        /* Tree Node */
+        .tree-node {
+            display: flex;
+            align-items: center;
+            padding: 6px 8px;
+            cursor: pointer;
+            border-radius: 4px;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .tree-node:hover {
+            background: var(--bg-header);
+        }
+
+        .tree-node.selected {
+            background: var(--godot-blue);
+        }
+
+        .tree-node-icon {
+            width: 16px;
+            text-align: center;
+        }
+
+        /* Inspector */
+        .inspector-section {
+            margin-bottom: 16px;
+        }
+
+        .inspector-section-title {
+            font-weight: 600;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 8px;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+
+        .inspector-property {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 6px 0;
+            align-items: center;
+            font-size: 13px;
+        }
+
+        .inspector-property label {
+            color: var(--text-secondary);
+            font-size: 12px;
+        }
+
+        .inspector-property input {
+            background: var(--bg-header);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 4px 8px;
+            color: var(--text-primary);
+            font-size: 12px;
+            width: 100%;
+        }
+
+        /* Bottom Panel */
+        .bottom-panel {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 200px;
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .bottom-tabs {
+            display: flex;
+            padding: 0 12px;
+            background: var(--bg-header);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .bottom-tab {
+            padding: 8px 16px;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 13px;
+            border-bottom: 2px solid transparent;
+        }
+
+        .bottom-tab.active {
+            color: var(--text-primary);
+            border-bottom-color: var(--godot-blue);
+        }
+
+        .bottom-content {
+            flex: 1;
+            padding: 8px;
+            overflow-y: auto;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+        }
+
+        .log-entry {
+            padding: 4px 8px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .log-entry.info { color: var(--text-primary); }
+        .log-entry.success { color: var(--accent-green); }
+        .log-entry.error { color: var(--accent-red); }
+        .log-entry.warning { color: var(--accent-yellow); }
+
+        /* Buttons */
+        .btn-primary {
+            padding: 8px 16px;
+            background: var(--godot-blue);
+            border: none;
+            border-radius: 4px;
+            color: white;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .btn-secondary {
+            padding: 8px 16px;
+            background: var(--bg-header);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        .full-width {
+            width: 100%;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 32px 16px;
+            color: var(--text-secondary);
+        }
+
+        /* Loading Overlay */
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .loading-spinner {
+            text-align: center;
+        }
+
+        .loading-spinner h3 {
+            margin-bottom: 16px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Bar -->
+    <header class="top-bar">
+        <div class="logo">
+            <span>🎮</span> Godot Web Editor
+        </div>
+        <div class="toolbar">
+            <button id="btn-import" title="导入游戏">📂 导入</button>
+            <button id="btn-export" title="导出游戏">💾 导出</button>
+            <div style="width: 1px; height: 24px; background: var(--border-color); margin: 0 8px;"></div>
+            <button id="btn-run" title="运行游戏">▶️ 运行</button>
+            <button id="btn-stop" title="停止" disabled>⏹️ 停止</button>
+            <button id="btn-save" title="保存并返回">💾 保存</button>
+        </div>
+        <div class="status-bar">
+            <span id="godot-status" class="status-indicator disconnected">●</span>
+            <span id="godot-status-text">未连接</span>
+        </div>
+    </header>
+
+    <!-- Editor Container -->
+    <div class="editor-container">
+        <!-- Left Panel: Scene Tree -->
+        <aside class="panel left-panel">
+            <div class="panel-header">
+                <h3>📋 场景对象</h3>
+                <button class="btn-secondary" id="btn-add-object" style="padding: 4px 8px; font-size: 12px;">+ 添加</button>
+            </div>
+            <div class="panel-content" id="scene-tree">
+                <div class="empty-state">
+                    <p>暂无对象</p>
+                    <small>导入游戏或添加对象</small>
+                </div>
+            </div>
+            <div class="panel-footer">
+                <button class="btn-primary full-width" id="btn-add-game-object">+ 游戏对象</button>
+            </div>
+        </aside>
+
+        <!-- Center Panel: Viewport -->
+        <main class="viewport-panel">
+            <div class="viewport-header">
+                <div style="display: flex; gap: 4px;">
+                    <button class="bottom-tab active">2D</button>
+                    <button class="bottom-tab">3D</button>
+                </div>
+                <div style="display: flex; gap: 4px;">
+                    <button title="选择">🖱️</button>
+                    <button title="移动">✥</button>
+                    <button title="旋转">⟳</button>
+                    <button title="缩放">⤢</button>
+                </div>
+                <span id="zoom-level" style="font-size: 12px; color: var(--text-secondary);">100%</span>
+            </div>
+            <div class="viewport-content">
+                <canvas id="gameCanvas" width="360" height="640"></canvas>
+                <div id="loading-overlay" class="loading-overlay" style="display: none;">
+                    <div class="loading-spinner">
+                        <h3>🎮 加载游戏中...</h3>
+                        <p>请稍候</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Panel: Inspector -->
+        <aside class="panel right-panel">
+            <div class="panel-header">
+                <h3>🔧 检查器</h3>
+            </div>
+            <div class="panel-content" id="inspector-content">
+                <div class="empty-state">
+                    <p>未选择对象</p>
+                    <small>从场景树选择一个对象</small>
+                </div>
+            </div>
+        </aside>
+    </div>
+
+    <!-- Bottom Panel: Output -->
+    <div class="bottom-panel">
+        <div class="bottom-tabs">
+            <button class="bottom-tab active">📝 输出</button>
+            <button class="bottom-tab">🐛 调试</button>
+            <button class="bottom-tab">📊 性能</button>
+        </div>
+        <div class="bottom-content" id="output-log">
+            <div class="log-entry info">编辑器已就绪</div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * Godot Web Editor - 轻量级游戏编辑器
+         * 从 AI Game Platform 导入游戏并提供可视化编辑
+         */
+
+        class GodotWebEditor {
+            constructor() {
+                this.currentGame = null;
+                this.gameObjects = [];
+                this.selectedObject = null;
+                this.isPlaying = false;
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                
+                this.init();
+            }
+
+            init() {
+                this.bindEvents();
+                this.checkConnection();
+                this.log('success', '编辑器已初始化');
+                
+                // 监听来自父页面的消息
+                window.addEventListener('message', (event) => this.handleParentMessage(event));
+                
+                // 通知父页面编辑器已就绪
+                this.sendToParent({ type: 'EDITOR_READY' });
+            }
+
+            bindEvents() {
+                document.getElementById('btn-import').onclick = () => this.showImportDialog();
+                document.getElementById('btn-export').onclick = () => this.exportGame();
+                document.getElementById('btn-run').onclick = () => this.runGame();
+                document.getElementById('btn-stop').onclick = () => this.stopGame();
+                document.getElementById('btn-save').onclick = () => this.saveGame();
+                document.getElementById('btn-add-game-object').onclick = () => this.addGameObject();
+            }
+
+            /**
+             * 处理来自父页面的消息
+             */
+            handleParentMessage(event) {
+                const message = event.data;
+                
+                if (message.type === 'LOAD_GAME') {
+                    this.loadGame(message.data);
+                }
+            }
+
+            /**
+             * 发送消息到父页面
+             */
+            sendToParent(message) {
+                if (window.opener && !window.opener.closed) {
+                    window.opener.postMessage(message, '*');
+                }
+            }
+
+            /**
+             * 加载游戏
+             */
+            loadGame(gameData) {
+                this.log('info', `加载游戏：${gameData.title || '未命名'}`);
+                
+                document.getElementById('loading-overlay').style.display = 'flex';
+                
+                this.currentGame = gameData;
+                
+                // 解析游戏对象
+                this.parseGameObjects();
+                
+                // 渲染场景树
+                this.renderSceneTree();
+                
+                // 绘制预览
+                this.drawPreview();
+                
+                setTimeout(() => {
+                    document.getElementById('loading-overlay').style.display = 'none';
+                    this.log('success', '游戏加载完成');
+                }, 500);
+            }
+
+            /**
+             * 解析游戏对象
+             */
+            parseGameObjects() {
+                if (!this.currentGame || !this.currentGame.code) return;
+                
+                const code = this.currentGame.code;
+                this.gameObjects = [];
+                
+                // 解析 Canvas
+                if (code.includes('<canvas')) {
+                    this.gameObjects.push({
+                        id: 'canvas',
+                        name: 'Canvas',
+                        type: 'Canvas',
+                        icon: '🖼️',
+                        properties: {
+                            width: 360,
+                            height: 640
+                        }
+                    });
+                }
+                
+                // 解析常见游戏元素
+                if (code.match(/player|玩家/i)) {
+                    this.gameObjects.push({
+                        id: 'player',
+                        name: 'Player',
+                        type: 'Sprite',
+                        icon: '👤',
+                        properties: {
+                            x: 180,
+                            y: 320,
+                            speed: 5
+                        }
+                    });
+                }
+                
+                if (code.match(/enemy|敌人 | 怪物/i)) {
+                    this.gameObjects.push({
+                        id: 'enemy',
+                        name: 'Enemy',
+                        type: 'Sprite',
+                        icon: '👾',
+                        properties: {
+                            x: 180,
+                            y: 100,
+                            speed: 3
+                        }
+                    });
+                }
+                
+                if (code.match(/ball|球/i)) {
+                    this.gameObjects.push({
+                        id: 'ball',
+                        name: 'Ball',
+                        type: 'Sprite',
+                        icon: '⚽',
+                        properties: {
+                            x: 180,
+                            y: 320,
+                            radius: 10,
+                            speedX: 3,
+                            speedY: 3
+                        }
+                    });
+                }
+                
+                if (code.match(/paddle|plate|挡板 | 球拍/i)) {
+                    this.gameObjects.push({
+                        id: 'paddle',
+                        name: 'Paddle',
+                        type: 'Sprite',
+                        icon: '🏓',
+                        properties: {
+                            x: 180,
+                            y: 600,
+                            width: 100,
+                            height: 10
+                        }
+                    });
+                }
+            }
+
+            /**
+             * 渲染场景树
+             */
+            renderSceneTree() {
+                const container = document.getElementById('scene-tree');
+                
+                if (this.gameObjects.length === 0) {
+                    container.innerHTML = `
+                        <div class="empty-state">
+                            <p>暂无对象</p>
+                            <small>导入游戏或添加对象</small>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                container.innerHTML = this.gameObjects.map(obj => `
+                    <div class="tree-node" data-object-id="${obj.id}" onclick="editor.selectObject('${obj.id}')">
+                        <span class="tree-node-icon">${obj.icon}</span>
+                        <span class="tree-node-name">${obj.name}</span>
+                        <span class="tree-node-type">${obj.type}</span>
+                    </div>
+                `).join('');
+            }
+
+            /**
+             * 选择对象
+             */
+            selectObject(objectId) {
+                const obj = this.gameObjects.find(o => o.id === objectId);
+                if (!obj) return;
+                
+                this.selectedObject = obj;
+                
+                // 更新选中状态
+                document.querySelectorAll('.tree-node').forEach(el => {
+                    el.classList.remove('selected');
+                    if (el.dataset.objectId === objectId) {
+                        el.classList.add('selected');
+                    }
+                });
+                
+                // 渲染检查器
+                this.renderInspector(obj);
+                this.log('info', `选中对象：${obj.name}`);
+            }
+
+            /**
+             * 渲染检查器
+             */
+            renderInspector(obj) {
+                const container = document.getElementById('inspector-content');
+                
+                container.innerHTML = `
+                    <div class="inspector-section">
+                        <div class="inspector-section-title">基本信息</div>
+                        <div class="inspector-property">
+                            <label>名称</label>
+                            <input type="text" value="${obj.name}" onchange="editor.updateObjectProperty('name', this.value)" />
+                        </div>
+                        <div class="inspector-property">
+                            <label>类型</label>
+                            <input type="text" value="${obj.type}" disabled />
+                        </div>
+                    </div>
+                `;
+                
+                // 添加属性编辑
+                if (obj.properties) {
+                    container.innerHTML += `
+                        <div class="inspector-section">
+                            <div class="inspector-section-title">属性</div>
+                            ${Object.entries(obj.properties).map(([key, value]) => `
+                                <div class="inspector-property">
+                                    <label>${key}</label>
+                                    <input type="number" value="${value}" onchange="editor.updateObjectProperty('${key}', parseFloat(this.value))" />
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                }
+            }
+
+            /**
+             * 更新对象属性
+             */
+            updateObjectProperty(key, value) {
+                if (!this.selectedObject) return;
+                
+                if (key === 'name') {
+                    this.selectedObject.name = value;
+                    this.renderSceneTree();
+                    this.selectObject(this.selectedObject.id);
+                } else {
+                    this.selectedObject.properties[key] = value;
+                }
+                
+                this.drawPreview();
+                this.log('success', `更新属性：${key} = ${value}`);
+            }
+
+            /**
+             * 添加游戏对象
+             */
+            addGameObject() {
+                const name = prompt('请输入对象名称:', 'NewObject');
+                if (!name) return;
+                
+                const newObj = {
+                    id: `obj_${Date.now()}`,
+                    name: name,
+                    type: 'Sprite',
+                    icon: '📦',
+                    properties: {
+                        x: 180,
+                        y: 320,
+                        width: 50,
+                        height: 50
+                    }
+                };
+                
+                this.gameObjects.push(newObj);
+                this.renderSceneTree();
+                this.log('success', `添加对象：${name}`);
+            }
+
+            /**
+             * 绘制预览
+             */
+            drawPreview() {
+                const ctx = this.ctx;
+                const width = this.canvas.width;
+                const height = this.canvas.height;
+                
+                // 清空画布
+                ctx.fillStyle = '#1a1a2e';
+                ctx.fillRect(0, 0, width, height);
+                
+                // 绘制网格
+                ctx.strokeStyle = '#2a2a3e';
+                ctx.lineWidth = 1;
+                for (let x = 0; x < width; x += 40) {
+                    ctx.beginPath();
+                    ctx.moveTo(x, 0);
+                    ctx.lineTo(x, height);
+                    ctx.stroke();
+                }
+                for (let y = 0; y < height; y += 40) {
+                    ctx.beginPath();
+                    ctx.moveTo(0, y);
+                    ctx.lineTo(width, y);
+                    ctx.stroke();
+                }
+                
+                // 绘制对象
+                this.gameObjects.forEach(obj => {
+                    const props = obj.properties;
+                    
+                    ctx.fillStyle = this.getObjectColor(obj.type);
+                    
+                    if (obj.type === 'Canvas') {
+                        ctx.strokeStyle = '#478cbf';
+                        ctx.lineWidth = 2;
+                        ctx.strokeRect(0, 0, width, height);
+                    } else if (props.width && props.height) {
+                        // 矩形
+                        ctx.fillRect(
+                            props.x - props.width / 2,
+                            props.y - props.height / 2,
+                            props.width,
+                            props.height
+                        );
+                    } else if (props.radius) {
+                        // 圆形
+                        ctx.beginPath();
+                        ctx.arc(props.x, props.y, props.radius, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else {
+                        // 默认矩形
+                        ctx.fillRect(props.x - 25, props.y - 25, 50, 50);
+                    }
+                    
+                    // 绘制名称
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '12px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(obj.name, props.x || width/2, (props.y || height/2) - 30);
+                });
+            }
+
+            /**
+             * 获取对象颜色
+             */
+            getObjectColor(type) {
+                const colors = {
+                    'Canvas': '#1a1a2e',
+                    'Sprite': '#478cbf',
+                    'Player': '#4ade80',
+                    'Enemy': '#f87171',
+                    'Ball': '#fbbf24',
+                    'Paddle': '#4a9eff'
+                };
+                return colors[type] || '#478cbf';
+            }
+
+            /**
+             * 运行游戏
+             */
+            runGame() {
+                if (this.isPlaying) return;
+                
+                this.isPlaying = true;
+                document.getElementById('btn-run').disabled = true;
+                document.getElementById('btn-stop').disabled = false;
+                
+                this.log('success', '运行游戏');
+                
+                // 这里可以加载实际的游戏代码到 canvas
+                // 简化版本只更新预览
+                this.animate();
+            }
+
+            /**
+             * 停止游戏
+             */
+            stopGame() {
+                if (!this.isPlaying) return;
+                
+                this.isPlaying = false;
+                document.getElementById('btn-run').disabled = false;
+                document.getElementById('btn-stop').disabled = true;
+                
+                this.log('info', '停止游戏');
+                this.drawPreview();
+            }
+
+            /**
+             * 动画循环
+             */
+            animate() {
+                if (!this.isPlaying) return;
+                
+                // 更新对象位置（简单演示）
+                this.gameObjects.forEach(obj => {
+                    if (obj.properties && obj.properties.speedX !== undefined) {
+                        obj.properties.x += obj.properties.speedX;
+                        obj.properties.y += obj.properties.speedY;
+                        
+                        // 边界检测
+                        if (obj.properties.x < 0 || obj.properties.x > this.canvas.width) {
+                            obj.properties.speedX *= -1;
+                        }
+                        if (obj.properties.y < 0 || obj.properties.y > this.canvas.height) {
+                            obj.properties.speedY *= -1;
+                        }
+                    }
+                });
+                
+                this.drawPreview();
+                requestAnimationFrame(() => this.animate());
+            }
+
+            /**
+             * 导出游戏
+             */
+            exportGame() {
+                if (!this.currentGame) {
+                    alert('没有可导出的游戏');
+                    return;
+                }
+                
+                // 发送导出请求到父页面
+                this.sendToParent({
+                    type: 'EXPORT_REQUEST',
+                    data: {
+                        format: 'html',
+                        gameData: this.currentGame
+                    }
+                });
+                
+                this.log('success', '游戏已导出');
+            }
+
+            /**
+             * 保存游戏
+             */
+            saveGame() {
+                if (!this.currentGame) {
+                    alert('没有可保存的游戏');
+                    return;
+                }
+                
+                // 发送更新到父页面
+                this.sendToParent({
+                    type: 'GAME_UPDATED',
+                    data: {
+                        id: this.currentGame.id,
+                        code: this.currentGame.code,
+                        title: this.currentGame.title,
+                        version: (this.currentGame.version || 1) + 1
+                    }
+                });
+                
+                this.log('success', '游戏已保存');
+                
+                // 延迟关闭窗口
+                setTimeout(() => {
+                    window.close();
+                }, 1000);
+            }
+
+            /**
+             * 显示导入对话框
+             */
+            showImportDialog() {
+                const code = prompt('请粘贴 HTML 游戏代码:');
+                if (!code) return;
+                
+                this.loadGame({
+                    id: `imported_${Date.now()}`,
+                    title: 'Imported Game',
+                    code: code,
+                    version: 1
+                });
+            }
+
+            /**
+             * 检查连接状态
+             */
+            async checkConnection() {
+                try {
+                    const response = await fetch('/api/health');
+                    if (response.ok) {
+                        document.getElementById('godot-status').className = 'status-indicator connected';
+                        document.getElementById('godot-status-text').textContent = '已连接';
+                        this.log('success', '已连接到后端服务');
+                    }
+                } catch (error) {
+                    this.log('warning', '后端服务未连接');
+                }
+            }
+
+            /**
+             * 日志输出
+             */
+            log(type, message) {
+                const timestamp = new Date().toLocaleTimeString();
+                const logEl = document.getElementById('output-log');
+                const entry = document.createElement('div');
+                entry.className = `log-entry ${type}`;
+                entry.textContent = `[${timestamp}] ${message}`;
+                logEl.appendChild(entry);
+                logEl.scrollTop = logEl.scrollHeight;
+                
+                console.log(`[${type.toUpperCase()}] ${message}`);
+            }
+        }
+
+        // 创建编辑器实例
+        const editor = new GodotWebEditor();
+    </script>
+</body>
+</html>

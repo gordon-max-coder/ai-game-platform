@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>双蛇对决 - 2分钟生存战</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #12151c;
+      color: #fff;
+      font-family: Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+      overflow: hidden;
+    }
+    .wrap {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 12px;
+    }
+    canvas {
+      max-width: 100%;
+      height: auto;
+      display: block;
+      margin: 0 auto;
+      background: linear-gradient(180deg, #182130 0%, #0f1622 100%);
+      border: 2px solid #2c3f5e;
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35);
+      touch-action: none;
+    }
+    .hint {
+      margin-top: 10px;
+      font-size: 12px;
+      opacity: 0.9;
+      text-align: center;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="game"></canvas>
+  <div class="hint">
+    红蛇：WASD / 蓝蛇：方向键<br>
+    规则：撞到对方身体自己死亡；3秒后复活为初始长度；2分钟后长度更长者获胜
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+
+  canvas.width = 360;
+  canvas.height = 640;
+
+  const W = canvas.width;
+  const H = canvas.height;
+
+  const CELL = 20;
+  const COLS = W / CELL;   // 18
+  const ROWS = H / CELL;   // 32
+  const HUD_H = 80;
+  const PLAY_Y = HUD_H;
+  const PLAY_ROWS = (H - HUD_H) / CELL; // 28
+
+  const GAME_DURATION = 120000;
+  const RESPAWN_TIME = 3000;
+  const STEP_TIME = 120;
+  const START_LENGTH = 5;
+  const FOOD_COUNT = 5;
+
+  let gameState = "menu"; // menu, playing, ended
+  let gameStartTime = 0;
+  let lastTime = 0;
+  let accumulator = 0;
+  let winnerText = "";
+  let flashTimer = 0;
+
+  const dirs = {
+    up:    { x: 0, y: -1 },
+    down:  { x: 0, y: 1 },
+    left:  { x: -1, y: 0 },
+    right: { x: 1, y: 0 }
+  };
+
+  function opposite(a, b) {
+    return a.x === -b.x && a.y === -b.y;
+  }
+
+  function randInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
+  }
+
+  function cellKey(x, y) {
+    return `${x},${y}`;
+  }
+
+  function cloneSegs(segs) {
+    return segs.map(s => ({ x: s.x, y: s.y }));
+  }
+
+  function createSnake(name, color, color2, controls, startX, startY, dir) {
+    const segs = [];
+    for (let i = 0; i < START_LENGTH; i++) {
+      segs.push({ x: startX - dir.x * i, y: startY - dir.y * i });
+    }
+    return {
+      name,
+      color,
+      color2,
+      controls,
+      segments: segs,
+      dir: { ...dir },
+      nextDir: { ...dir },
+      alive: true,
+      respawnAt: 0,
+      score: 0,
+      deaths: 0,
+      grow: 0,
+      blink: 0
+    };
+  }
+
+  let snake1, snake2, foods, particles;
+
+  function initGame() {
+    snake1 = createSnake(
+      "红蛇", "#ff5a5f", "#ff9a9d",
+      { up: "w", down: "s", left: "a", right: "d" },
+      5, 8, dirs.right
+    );
+
+    snake2 = createSnake(
+      "蓝蛇", "#42a5ff", "#9fd3ff",
+      { up: "arrowup", down: "arrowdown", left: "arrowleft", right: "arrowright" },
+      COLS - 6, PLAY_ROWS - 7, dirs.left
+    );
+
+    foods = [];
+    particles = [];
+    for (let i = 0; i < FOOD_COUNT; i++) spawnFood();
+
+    gameStartTime = performance.now();
+    lastTime = gameStartTime;
+    accumulator = 0;
+    flashTimer = 0;
+    winnerText = "";
+    gameState = "playing";
+  }
+
+  function occupiedSet(includeDead = false) {
+    const set = new Set();
+    [snake1, snake2].forEach(s => {
+      if (s.alive || includeDead) {
+        s.segments.forEach(seg => set.add(cellKey(seg.x, seg.y)));
+      }
+    });
+    foods.forEach(f => set.add(cellKey(f.x, f.y)));
+    return set;
+  }
+
+  function spawnFood() {
+    const occ = occupiedSet();
+    let tries = 0;
+    while (tries < 500) {
+      const x = randInt(0, COLS - 1);
+      const y = randInt(0, PLAY_ROWS - 1);
+      if (!occ.has(cellKey(x, y))) {
+        const kindRand = Math.random();
+        let type = "normal";
+        let color = "#ffd54a";
+        let value = 1;
+        if (kindRand < 0.14) {
+          type = "bonus";
+          color = "#7CFF7A";
+          value = 2;
+        } else if (kindRand < 0.22) {
+          type = "super";
+          color = "#ff7bf0";
+          value = 3;
+        }
+        foods.push({
+          x, y, type, color, value,
+          pulse: Math.random() * Math.PI * 2
+        });
+        return;
+      }
+      tries++;
+    }
+  }
+
+  function killSnake(snake, reason = "") {
+    if (!snake.alive) return;
+    snake.alive = false;
+    snake.deaths++;
+    snake.respawnAt = performance.now() + RESPAWN_TIME;
+    snake.blink = 1;
+    createExplosion(snake.segments[0].x, snake.segments[0].y, snake.color);
+  }
+
+  function createExplosion(cx, cy, color) {
+    const px = cx * CELL + CELL / 2;
+    const py = PLAY_Y + cy * CELL + CELL / 2;
+    for (let i = 0; i < 12; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = Math.random() * 2 + 1;
+      particles.push({
+        x: px,
+        y: py,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life: 30 + Math.random() * 15,
+        color
+      });
+    }
+  }
+
+  function respawnSnake(snake) {
+    const zones = snake === snake1
+      ? [
+          { x: 4, y: 8, dir: dirs.right },
+          { x: 4, y: PLAY_ROWS - 8, dir: dirs.right }
+        ]
+      : [
+          { x: COLS - 5, y: PLAY_ROWS - 8, dir: dirs.left },
+          { x: COLS - 5, y: 8, dir: dirs.left }
+        ];
+
+    for (const z of zones) {
+      const segs = [];
+      let ok = true;
+      for (let i = 0; i < START_LENGTH; i++) {
+        const x = z.x - z.dir.x * i;
+        const y = z.y - z.dir.y * i;
+        if (x < 0 || x >= COLS || y < 0 || y >= PLAY_ROWS) {
+          ok = false;
+          break;
+        }
+        if (isOccupiedByAliveSnake(x, y)) {
+          ok = false;
+          break;
+        }
+        segs.push({ x, y });
+      }
+      if (ok) {
+        snake.segments = segs;
+        snake.dir = { ...z.dir };
+        snake.nextDir = { ...z.dir };
+        snake.grow = 0;
+        snake.alive = true;
+        snake.blink = 0;
+        return;
+      }
+    }
+
+    let tries = 0;
+    while (tries < 300) {
+      const x = randInt(2, COLS - 3);
+      const y = randInt(2, PLAY_ROWS - 3);
+      const dir = snake === snake1 ? dirs.right : dirs.left;
+      const segs = [];
+      let ok = true;
+      for (let i = 0; i < START_LENGTH; i++) {
+        const sx = x - dir.x * i;
+        const sy = y - dir.y * i;
+        if (sx < 0 || sx >= COLS || sy < 0 || sy >= PLAY_ROWS || isOccupiedByAliveSnake(sx, sy)) {
+          ok = false;
+          break;
+        }
+        segs.push({ x: sx, y: sy });
+      }
+      if (ok) {
+        snake.segments = segs;
+        snake.dir = { ...dir };
+        snake.nextDir = { ...dir };
+        snake.grow = 0;
+        snake.alive = true;
+        snake.blink = 0;
+        return;
+      }
+      tries++;
+    }
+  }
+
+  function isOccupiedByAliveSnake(x, y) {
+    const snakes = [snake1, snake2];
+    for (const s of snakes) {
+      if (!s.alive) continue;
+      for (const seg of s.segments) {
+        if (seg.x === x && seg.y === y) return true;
+      }
+    }
+    return false;
+  }
+
+  function setDirection(snake, dir) {
+    if (!snake.alive) return;
+    if (!opposite(snake.dir, dir)) snake.nextDir = dir;
+  }
+
+  window.addEventListener("keydown", (e) => {
+    const k = e.key.toLowerCase();
+
+    if (gameState === "menu") {
+      initGame();
+      return;
+    }
+
+    if (gameState === "ended") {
+      if (k === " " || k === "enter") initGame();
+      return;
+    }
+
+    if (k === snake1.controls.up) setDirection(snake1, dirs.up);
+    else if (k === snake1.controls.down) setDirection(snake1, dirs.down);
+    else if (k === snake1.controls.left) setDirection(snake1, dirs.left);
+    else if (k === snake1.controls.right) setDirection(snake1, dirs.right);
+    else if (k === snake2.controls.up) setDirection(snake2, dirs.up);
+    else if (k === snake2.controls.down) setDirection(snake2, dirs.down);
+    else if (k === snake2.controls.left) setDirection(snake2, dirs.left);
+    else if (k === snake2.controls.right) setDirection(snake2, dirs.right);
+  });
+
+  let touchStart = null;
+  canvas.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    if (gameState === "menu") {
+      initGame();
+      return;
+    }
+    if (gameState === "ended") {
+      initGame();
+      return;
+    }
+    const t = e.changedTouches[0];
+    const rect = canvas.getBoundingClientRect();
+    touchStart = {
+      x: t.clientX - rect.left,
+      y: t.clientY - rect.top
+    };
+  }, { passive: false });
+
+  canvas.addEventListener("touchend", (e) => {
+    e.preventDefault();
+    if (!touchStart || gameState !== "playing") return;
+    const t = e.changedTouches[0];
+    const rect = canvas.getBoundingClientRect();
+    const end = {
+      x: t.clientX - rect.left,
+      y: t.clientY - rect.top
+    };
+    const dx = end.x - touchStart.x;
+    const dy = end.y - touchStart.y;
+
+    const leftSide = touchStart.x < rect.width / 2;
+    let dir = null;
+    if (Math.abs(dx) > Math.abs(dy)) dir = dx > 0 ? dirs.right : dirs.left;
+    else dir = dy > 0 ? dirs.down : dirs.up;
+
+    if (leftSide) setDirection(snake1, dir);
+    else setDirection(snake2, dir);
+
+    touchStart = null;
+  }, { passive: false });
+
+  function update(stepMs, now) {
+    if (gameState !== "playing") return;
+
+    flashTimer += stepMs;
+
+    [snake1, snake2].forEach(s => {
+      if (!s.alive && now >= s.respawnAt) {
+        respawnSnake(s);
+      }
+    });
+
+    moveSnakes();
+    updateParticles();
+
+    const elapsed = now - gameStartTime;
+    if (elapsed >= GAME_DURATION) {
+      endGame();
+    }
+  }
+
+  function moveSnakes() {
+    const snakes = [snake1, snake2];
+
+    for (const s of snakes) {
+      if (!s.alive) continue;
+      if (!opposite(s.dir, s.nextDir)) s.dir = { ...s.nextDir };
+    }
+
+    const old1 = cloneSegs(snake1.segments);
+    const old2 = cloneSegs(snake2.segments);
+
+    const next = [];
+    for (const s of snakes) {
+      if (!s.alive) {
+        next.push(null);
+        continue;
+      }
+      const head = s.segments[0];
+      next.push({
+        x: head.x + s.dir.x,
+        y: head.y + s.dir.y
+      });
+    }
+
+    for (let i = 0; i < snakes.length; i++) {
+      const s = snakes[i];
+      if (!s.alive) continue;
+      const n = next[i];
+      if (n.x < 0 || n.x >= COLS || n.y < 0 || n.y >= PLAY_ROWS) {
+        killSnake(s, "wall");
+      }
+    }
+
+    if (snake1.alive && snake2.alive) {
+      if (next[0].x === next[1].x && next[0].y === next[1].y) {
+        killSnake(snake1, "head");
+        killSnake(snake2, "head");
+      }
+    }
+
+    if (snake1.alive) {
+      for (let i = 1; i < old1.length; i++) {
+        if (next[0].x === old1[i].x && next[0].y === old1[i].y) {
+          killSnake(snake1, "self");
+          break;
+        }
+      }
+    }
+
+    if (snake2.alive) {
+      for (let i = 1; i < old2.length; i++) {
+        if (next[1].x === old2[i].x && next[1].y === old2[i].y) {
+          killSnake(snake2, "self");
+          break;
+        }
+      }
+    }
+
+    if (snake1.alive) {
+      for (let i = 0; i < old2.length; i++) {
+        if (next[0].x === old2[i].x && next[0].y === old2[i].y) {
+          killSnake(snake1, "enemy");
+          break;
+        }
+      }
+    }
+
+    if (snake2.alive) {
+      for (let i = 0; i < old1.length; i++) {
+        if (next[1].x === old1[i].x && next[1].y === old1[i].y) {
+          killSnake(snake2, "enemy");
+          break;
+        }
+      }
+    }
+
+    for (let i = 0; i < snakes.length; i++) {
+      const s = snakes[i];
+      if (!s.alive) continue;
+
+      s.segments.unshift(next[i]);
+
+      let ate = false;
+      for (let f = 0; f < foods.length; f++) {
+        const food = foods[f];
+        if (food.x === next[i].x && food.y === next[i].y) {
+          s.grow += food.value;
+          s.score += food.value * 10;
+          foods.splice(f, 1);
+          spawnFood();
+          createExplosion(food.x, food.y, food.color);
+          ate = true;
+          break;
+        }
+      }
+
+      if (s.grow > 0) {
+        s.grow--;
+      } else {
+        s.segments.pop();
+      }
+
+      if (ate && Math.random() < 0.35 && foods.length < FOOD_COUNT + 1) {
+        spawnFood();
+      }
+    }
+
+    foods.forEach(f => f.pulse += 0.18);
+  }
+
+  function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life--;
+      p.vx *= 0.98;
+      p.vy *= 0.98;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  function endGame() {
+    gameState = "ended";
+    const l1 = snake1.segments.length;
+    const l2 = snake2.segments.length;
+    if (l1 > l2) winnerText = `红蛇获胜！ ${l1} : ${l2}`;
+    else if (l2 > l1) winnerText = `蓝蛇获胜！ ${l2} : ${l1}`;
+    else winnerText = `平局！ ${l1} : ${l2}`;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, W, H);
+    drawBackground();
+    drawGrid();
+    drawFoods();
+    drawSnakes();
+    drawParticles();
+    drawHUD();
+
+    if (gameState === "menu") drawMenu();
+    if (gameState === "ended") drawGameOver();
+  }
+
+  function drawBackground() {
+    ctx.fillStyle = "#111826";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "#152033";
+    ctx.fillRect(0, 0, W, HUD_H);
+
+    ctx.fillStyle = "#0d1420";
+    ctx.fillRect(0, PLAY_Y, W, H - PLAY_Y);
+  }
+
+  function drawGrid() {
+    ctx.strokeStyle = "rgba(255,255,255,0.05)";
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= COLS; x++) {
+      ctx.beginPath();
+      ctx.moveTo(x * CELL + 0.5, PLAY_Y);
+      ctx.lineTo(x * CELL + 0.5, H);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= PLAY_ROWS; y++) {
+      ctx.beginPath();
+      ctx.moveTo(0, PLAY_Y + y * CELL + 0.5);
+      ctx.lineTo(W, PLAY_Y + y * CELL + 0.5);
+      ctx.stroke();
+    }
+  }
+
+  function drawFoods() {
+    foods.forEach(f => {
+      const x = f.x * CELL + CELL / 2;
+      const y = PLAY_Y + f.y * CELL + CELL / 2;
+      const r = 5 + Math.sin(f.pulse) * 1.5;
+
+      ctx.save();
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = f.color;
+      ctx.fillStyle = f.color;
+      ctx.beginPath();
+      ctx.arc(x, y, r, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = "rgba(255,255,255,0.9)";
+      ctx.beginPath();
+      ctx.arc(x - 1.5, y - 1.5, r * 0.35, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+  }
+
+  function drawSnakes() {
+    [snake1, snake2].forEach(s => {
+      if (!s.alive) return;
+
+      for (let i = s.segments.length - 1; i >= 0; i--) {
+        const seg = s.segments[i];
+        const px = seg.x * CELL;
+        const py = PLAY_Y + seg.y * CELL;
+
+        const isHead = i === 0;
+        ctx.save();
+        if (isHead) {
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = s.color;
+        }
+        ctx.fillStyle = isHead ? s.color2 : s.color;
+        roundRect(ctx, px + 2, py + 2, CELL - 4, CELL - 4, 6);
+        ctx.fill();
+
+        if (isHead) {
+          const cx = px + CELL / 2;
+          const cy = py + CELL / 2;
+          const ex = s.dir.x;
+          const ey = s.dir.y;
+
+          ctx.fillStyle = "#fff";
+          ctx.beginPath();
+          ctx.arc(cx - ey * 4 + ex * 2, cy - ex * 4 + ey * 2, 2.3, 0, Math.PI * 2);
+          ctx.arc(cx + ey * 4 + ex * 2, cy + ex * 4 + ey * 2, 2.3, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.fillStyle = "#000";
+          ctx.beginPath();
+          ctx.arc(cx - ey * 4 + ex * 3, cy - ex * 4 + ey * 3, 1, 0, Math.PI * 2);
+          ctx.arc(cx + ey * 4 + ex * 3, cy + ex * 4 + ey * 3, 1, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    });
+
+    [snake1, snake2].forEach(s => {
+      if (s.alive) return;
+      const remain = Math.max(0, s.respawnAt - performance.now());
+      const sec = Math.ceil(remain / 1000);
+      const label = `${s.name}复活 ${sec}s`;
+      const x = s === snake1 ? W * 0.25 : W * 0.75;
+      const y = H * 0.5;
+
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      roundRect(ctx, x - 52, y - 18, 104, 36, 10);
+      ctx.fill();
+
+      ctx.fillStyle = s.color2;
+      ctx.font = "bold 14px Arial";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, x, y);
+      ctx.restore();
+    });
+  }
+
+  function drawParticles() {
+    particles.forEach(p => {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, p.life / 45);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, 3, 3);
+      ctx.restore();
+    });
+  }
+
+  function drawHUD() {
+    const elapsed = gameState === "menu" ? 0 : Math.min(GAME_DURATION, performance.now() - gameStartTime);
+    const remain = Math.max(0, GAME_DURATION - elapsed);
+    const totalSec = Math.ceil(remain / 1000);
+    const min = Math.floor(totalSec / 60);
+    const sec = totalSec % 60;
+    const timeStr = `${min}:${String(sec).padStart(2, "0")}`;
+
+    ctx.fillStyle = snake1.color;
+    ctx.font = "bold 18px Arial";
+    ctx.textAlign = "left";
+    ctx.fillText("红蛇", 14, 24);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "14px Arial";
+    ctx.fillText(`长度 ${snake1.segments.length}`, 14, 46);
+    ctx.fillText(`分数 ${snake1.score}`, 14, 64);
+
+    ctx.fillStyle = snake2.color;
+    ctx.font = "bold 18px Arial";
+    ctx.textAlign = "right";
+    ctx.fillText("蓝蛇", W - 14, 24);
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "14px Arial";
+    ctx.fillText(`长度 ${snake2.segments.length}`, W - 14, 46);
+    ctx.fillText(`分数 ${snake2.score}`, W - 14, 64);
+
+    ctx.save();
+    ctx.textAlign = "center";
+    ctx.fillStyle = remain <= 10000 && Math.floor(flashTimer / 200) % 2 === 0 ? "#ff6b6b" : "#ffe082";
+    ctx.font = "bold 28px Arial";
+    ctx.fillText(timeStr, W / 2, 32);
+
+    const p = elapsed / GAME_DURATION;
+    ctx.fillStyle = "rgba(255,255,255,0.14)";
+    roundRect(ctx, W / 2 - 70, 48, 140, 14, 7);
+    ctx.fill();
+    ctx.fillStyle = "#7CFF7A";
+    roundRect(ctx, W / 2 - 70, 48, 140 * (1 - p), 14, 7);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawMenu() {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 30px Arial";
+    ctx.fillText("双蛇对决", W / 2, 180);
+
+    ctx.fillStyle = "#ffd54a";
+    ctx.font = "bold 18px Arial";
+    ctx.fillText("2分钟长度争霸战", W / 2, 215);
+
+    ctx.fillStyle = "#d7e3ff";
+    ctx.font = "15px Arial";
+    const lines = [
+      "红蛇：WASD    蓝蛇：方向键",
+      "1. 撞到对方身体，自己死亡",
+      "2. 死亡后3秒复活，长度重置为初始",
+      "3. 时间结束后，长度更长的一方获胜",
+      "4. 吃食物增长并获得分数"
+    ];
+    lines.forEach((line, i) => ctx.fillText(line, W / 2, 270 + i * 28));
+
+    ctx.fillStyle = "#7CFF7A";
+    ctx.font = "bold 20px Arial";
+    ctx.fillText("按任意键或点击开始", W / 2, 470);
+    ctx.restore();
+  }
+
+  function drawGameOver() {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.52)";
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.font = "bold 30px Arial";
+    ctx.fillText("比赛结束", W / 2, 220);
+
+    ctx.fillStyle = "#ffe082";
+    ctx.font = "bold 22px Arial";
+    ctx.fillText(winnerText, W / 2, 265);
+
+    ctx.fillStyle = snake1.color2;
+    ctx.font = "16px Arial";
+    ctx.fillText(`红蛇 - 长度:${snake1.segments.length}  分数:${snake1.score}  死亡:${snake1.deaths}`, W / 2, 320);
+
+    ctx.fillStyle = snake2.color2;
+    ctx.fillText(`蓝蛇 - 长度:${snake2.segments.length}  分数:${snake2.score}  死亡:${snake2.deaths}`, W / 2, 350);
+
+    ctx.fillStyle = "#7CFF7A";
+    ctx.font = "bold 18px Arial";
+    ctx.fillText("按空格 / 回车 或 点击重新开始", W / 2, 430);
+    ctx.restore();
+  }
+
+  function roundRect(ctx, x, y, w, h, r) {
+    const rr = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + rr, y);
+    ctx.arcTo(x + w, y, x + w, y + h, rr);
+    ctx.arcTo(x + w, y + h, x, y + h, rr);
+    ctx.arcTo(x, y + h, x, y, rr);
+    ctx.arcTo(x, y, x + w, y, rr);
+    ctx.closePath();
+  }
+
+  function loop(now) {
+    const dt = Math.min(50, now - lastTime);
+    lastTime = now;
+
+    if (gameState === "playing") {
+      accumulator += dt;
+      while (accumulator >= STEP_TIME) {
+        update(STEP_TIME, now);
+        accumulator -= STEP_TIME;
+      }
+    } else {
+      updateParticles();
+    }
+
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  draw();
+  requestAnimationFrame((t) => {
+    lastTime = t;
+    loop(t);
+  });
+})();
+</script>
+</body>
+</html>

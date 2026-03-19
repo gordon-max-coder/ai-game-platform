@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>减速！（Slow Down）</title>
+<style>
+  html,body{height:100%;margin:0;background:#111;color:#fff;font-family:Arial,Helvetica,sans-serif}
+  .wrap{display:flex;align-items:center;justify-content:center;height:100%;padding:20px;box-sizing:border-box}
+  canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+  /* UI overlay for small hints */
+  .hint{position:fixed;left:12px;bottom:12px;color:#ddd;font-size:12px;background:rgba(0,0,0,0.4);padding:8px;border-radius:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="game"></canvas>
+</div>
+<div class="hint">左右拖动 / ← → / A D：移动 ；按住空格或触摸屏幕：刹车</div>
+
+<script>
+(function(){
+  // Canvas setup
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 360;
+  canvas.height = 640;
+
+  // Game constants
+  const W = canvas.width;
+  const H = canvas.height;
+
+  // Player
+  const player = {
+    w: 44,
+    h: 64,
+    x: W/2 - 22,
+    y: H - 110,
+    speedX: 420, // px per second for lateral movement
+    color: '#57C5A0',
+    alive: true
+  };
+
+  // Speed (road scroll speed)
+  let gameSpeed = 16.0;   // initial "too fast" speed
+  const minSpeed = 2.0;
+  const maxSpeed = 30.0;
+  const speedIncreasePerSec = 0.6; // increases over time to create pressure
+  const brakeMaxEffect = 20.0; // how much effective reduction the brake can do (visual)
+  const autoRecoverRate = 6.0; // how quickly unbraked speed returns to forced rising curve
+
+  // Brake energy pickups
+  const pickups = [];
+  const pickupSpawnIntervalBase = 2.5; // seconds at baseline (modified by speed)
+  let pickupTimer = 0;
+
+  // Obstacles (traffic)
+  const obstacles = [];
+  let obstacleTimer = 0;
+  const obstacleBaseInterval = 0.6; // seconds baseline
+
+  // Score
+  let score = 0;
+  let distance = 0;
+  let highScore = parseInt(localStorage.getItem('slowdown_high') || '0', 10);
+
+  // Game states
+  let state = 'menu'; // menu, playing, gameover
+  let lastTime = performance.now();
+
+  // Input
+  const keys = {};
+  let touchX = null;
+  let braking = false;
+  let pointerDown = false;
+
+  // Visual road stripes
+  const laneCount = 3;
+  const laneWidth = W / laneCount;
+  let stripeOffset = 0;
+
+  // Utility
+  function rand(min,max){ return Math.random()*(max-min)+min; }
+
+  // Reset game
+  function reset(){
+    player.x = W/2 - player.w/2;
+    player.y = H - 110;
+    player.alive = true;
+    obstacles.length = 0;
+    pickups.length = 0;
+    obstacleTimer = 0;
+    pickupTimer = 0;
+    score = 0;
+    distance = 0;
+    gameSpeed = 18.0; // start "too fast" deliberately
+    stripeOffset = 0;
+    braking = false;
+  }
+
+  // Spawning obstacles
+  function spawnObstacle(){
+    const lane = Math.floor(rand(0,laneCount));
+    const w = Math.floor(rand(42, 68));
+    const h = Math.floor(rand(36, 80));
+    const x = lane * laneWidth + (laneWidth - w) / 2;
+    obstacles.push({
+      x: x,
+      y: -h - rand(0,80),
+      w: w,
+      h: h,
+      color: '#E85A4F',
+      wobble: rand(-40,40),
+      angle: rand(-0.2,0.2)
+    });
+  }
+
+  // Spawning pickups
+  function spawnPickup(){
+    const lane = Math.floor(rand(0,laneCount));
+    const size = 26;
+    const x = lane * laneWidth + (laneWidth - size) / 2;
+    pickups.push({
+      x: x,
+      y: -size - rand(10,40),
+      size: size,
+      color: '#FFD166'
+    });
+  }
+
+  // Collision
+  function rectsCollide(a,b){
+    return !(a.x + a.w < b.x || a.x > b.x + (b.w||b.size) || a.y + a.h < b.y || a.y > b.y + (b.h||b.size));
+  }
+
+  // Main update
+  function update(dt){
+    if(state !== 'playing') return;
+
+    // Increase baseline speed slowly (pressure)
+    const baselineIncrease = speedIncreasePerSec * dt;
+    // If braking, reduce speed toward minSpeed quickly; else let speed drift up.
+    if(braking){
+      // braking effect stronger the faster we are
+      const brakePower = 26; // how strong manual brake is
+      gameSpeed -= brakePower * dt;
+    } else {
+      // Recover towards an increasing baseline
+      gameSpeed += baselineIncrease * Math.min(1, dt * autoRecoverRate);
+    }
+
+    // Cap speed
+    if(gameSpeed < minSpeed) gameSpeed = minSpeed;
+    if(gameSpeed > maxSpeed) gameSpeed = maxSpeed;
+
+    // Update stripe offset for road movement (visual)
+    stripeOffset += gameSpeed * dt * 30;
+    stripeOffset %= 40;
+
+    // Player lateral movement
+    let targetX = player.x;
+    // Keyboard
+    if(keys['ArrowLeft'] || keys['a'] || keys['A']) targetX -= player.speedX * dt;
+    if(keys['ArrowRight'] || keys['d'] || keys['D']) targetX += player.speedX * dt;
+    // Touch drag control
+    if(pointerDown && touchX !== null){
+      // Smooth follow finger
+      const desired = touchX - player.w / 2;
+      const diff = desired - player.x;
+      player.x += diff * Math.min(1, 10 * dt);
+    } else {
+      // Keep within road lanes boundary using targetX
+      player.x = targetX;
+    }
+
+    // Boundaries
+    if(player.x < 8) player.x = 8;
+    if(player.x + player.w > W - 8) player.x = W - 8 - player.w;
+
+    // Spawn obstacles more frequently at higher speeds
+    const obsInterval = Math.max(0.25, obstacleBaseInterval - (gameSpeed - 8) * 0.02);
+    obstacleTimer += dt;
+    if(obstacleTimer > obsInterval){
+      obstacleTimer = 0;
+      spawnObstacle();
+    }
+
+    // Spawn pickups occasionally
+    const pickInterval = Math.max(0.9, pickupSpawnIntervalBase - (gameSpeed - 8) * 0.05);
+    pickupTimer += dt;
+    if(pickupTimer > pickInterval && Math.random() < 0.9){
+      pickupTimer = 0;
+      spawnPickup();
+    }
+
+    // Update obstacles
+    for(let i=obstacles.length-1;i>=0;i--){
+      const o = obstacles[i];
+      o.y += gameSpeed * dt * 40 * 0.7 * (1 + Math.sin(o.wobble + o.y*0.02)*0.03);
+      // remove if out
+      if(o.y > H + 120) obstacles.splice(i,1);
+    }
+
+    // Update pickups
+    for(let i=pickups.length-1;i>=0;i--){
+      const p = pickups[i];
+      p.y += gameSpeed * dt * 40;
+      if(p.y > H + 40) pickups.splice(i,1);
+    }
+
+    // Check collisions
+    const pBox = {x:player.x, y:player.y, w:player.w, h:player.h};
+    // obstacles
+    for(let i=0;i<obstacles.length;i++){
+      const o = obstacles[i];
+      if(rectsCollide(pBox, o)){
+        // crash
+        player.alive = false;
+        state = 'gameover';
+        if(Math.floor(score) > highScore){
+          highScore = Math.floor(score);
+          localStorage.setItem('slowdown_high', highScore);
+        }
+        return;
+      }
+    }
+    // pickups
+    for(let i=pickups.length-1;i>=0;i--){
+      const pk = pickups[i];
+      const pkBox = {x:pk.x, y:pk.y, w:pk.size, h:pk.size};
+      if(rectsCollide(pBox, pkBox)){
+        // collect reduces speed and gives score
+        pickups.splice(i,1);
+        score += 50;
+        gameSpeed -= 3 + Math.random()*2; // instant reduction
+        if(gameSpeed < minSpeed) gameSpeed = minSpeed;
+      }
+    }
+
+    // Update score & distance (distance influenced by speed)
+    distance += gameSpeed * dt * 10;
+    score += dt * gameSpeed * 2;
+
+    // small automatic penalty for staying at top speeds (encourage using brake)
+    if(gameSpeed > 20){
+      score -= dt * (gameSpeed - 18) * 1.5; // pressure
+    }
+  }
+
+  // Draw functions
+  function draw(){
+    // background
+    ctx.fillStyle = '#1a1f2b';
+    ctx.fillRect(0,0,W,H);
+
+    // draw road with borders
+    const roadMargin = 20;
+    ctx.fillStyle = '#2b2f3a';
+    ctx.fillRect(roadMargin, 0, W - roadMargin*2, H);
+
+    // dashed center stripes / lanes
+    ctx.save();
+    ctx.clip(new Path2D());
+    ctx.translate(0, stripeOffset % 40);
+    const stripeH = 32;
+    for(let lane=1; lane<laneCount; lane++){
+      const x = lane * laneWidth;
+      ctx.fillStyle = 'rgba(255,255,255,0.06)';
+      for(let y=-40; y<H+80; y+=stripeH+16){
+        ctx.fillRect(x - 3, y, 6, stripeH);
+      }
+    }
+    ctx.restore();
+
+    // decorative roadside
+    ctx.fillStyle = '#0e6e66';
+    ctx.fillRect(0, H-60, W, 60);
+    ctx.fillStyle = '#183d3a';
+    ctx.fillRect(0, H-60, 20, 60);
+    ctx.fillRect(W-20, H-60, 20, 60);
+
+    // draw pickups
+    pickups.forEach(p=>{
+      // glow
+      ctx.fillStyle = 'rgba(255,209,102,0.12)';
+      ctx.beginPath();
+      ctx.arc(p.x + p.size/2, p.y + p.size/2, p.size, 0, Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = p.color;
+      ctx.fillRect(p.x, p.y, p.size, p.size);
+      ctx.fillStyle = '#6b3f00';
+      ctx.fillRect(p.x+6, p.y+6, p.size-12, p.size-12);
+    });
+
+    // draw obstacles
+    obstacles.forEach(o=>{
+      ctx.save();
+      ctx.translate(o.x + o.w/2, o.y + o.h/2);
+      ctx.rotate(Math.sin((o.y*0.02) + o.wobble*0.01)*0.06);
+      ctx.fillStyle = o.color;
+      ctx.fillRect(-o.w/2, -o.h/2, o.w, o.h);
+      // windows
+      ctx.fillStyle = 'rgba(0,0,0,0.15)';
+      ctx.fillRect(-o.w/4, -o.h/6, o.w/2, o.h/4);
+      ctx.restore();
+    });
+
+    // draw player
+    // slight lean based on braking
+    ctx.save();
+    const lean = (braking ? -0.06 : (keys['ArrowLeft']||keys['a'] ? -0.06 : keys['ArrowRight']||keys['d'] ? 0.06 : 0));
+    ctx.translate(player.x + player.w/2, player.y + player.h/2);
+    ctx.rotate(lean);
+    // body
+    ctx.fillStyle = player.color;
+    roundRect(ctx, -player.w/2, -player.h/2, player.w, player.h, 6, true, false);
+    // windshield
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    ctx.fillRect(-player.w/6, -player.h/2 + 10, player.w/3, player.h/3);
+    // wheels
+    ctx.fillStyle = '#111';
+    ctx.fillRect(-player.w/2 + 6, player.h/2 - 12, 12, 6);
+    ctx.fillRect(player.w/2 - 18, player.h/2 - 12, 12, 6);
+    ctx.restore();
+
+    // HUD - score and speed
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(10,10,160,56);
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px Arial';
+    ctx.fillText('得分: ' + Math.max(0, Math.floor(score)), 18, 30);
+    ctx.fillText('高分: ' + highScore, 18, 48);
+    // speed bar
+    const spX = W - 12 - 100;
+    ctx.fillStyle = 'rgba(0,0,0,0.4)';
+    ctx.fillRect(spX,10,100,56);
+    ctx.fillStyle = '#fff';
+    ctx.fillText('速度: ' + Math.floor(gameSpeed), spX+8, 30);
+    // speed meter
+    const meterH = 28;
+    const meterW = 80;
+    const meterX = spX + 10;
+    const meterY = 34;
+    const normalized = (gameSpeed - minSpeed)/(maxSpeed - minSpeed);
+    ctx.fillStyle = '#444';
+    roundRect(ctx, meterX, meterY, meterW, 8, 4, true, false);
+    ctx.fillStyle = normalized > 0.7 ? '#ff6b6b' : (normalized > 0.35 ? '#ffd166' : '#57C5A0');
+    ctx.fillRect(meterX, meterY, meterW * Math.min(1, Math.max(0, normalized)), 8);
+
+    // distance
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    ctx.font = '13px Arial';
+    ctx.fillText('里程: ' + Math.floor(distance) + 'm', 18, 72);
+
+    // state overlays
+    if(state === 'menu'){
+      drawMenu();
+    } else if(state === 'gameover'){
+      drawGameOver();
+    }
+  }
+
+  function drawMenu(){
+    ctx.fillStyle = 'rgba(0,0,0,0.56)';
+    ctx.fillRect(40, 140, W-80, 260);
+    ctx.fillStyle = '#fff';
+    ctx.font = '22px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('移动速度太快了，减慢速度', W/2, 180);
+    ctx.font = '14px Arial';
+    ctx.fillText('左右移动避免障碍', W/2, 210);
+    ctx.fillText('按住屏幕或空格来刹车', W/2, 235);
+    ctx.fillText('收集黄色减速包来快速减速并得分', W/2, 260);
+    ctx.fillStyle = '#57C5A0';
+    roundRect(ctx, W/2 - 70, 300, 140, 42, 8, true, false);
+    ctx.fillStyle = '#071621';
+    ctx.font = '16px Arial';
+    ctx.fillText('开始游戏', W/2, 328);
+    ctx.textAlign = 'left';
+  }
+
+  function drawGameOver(){
+    ctx.fillStyle = 'rgba(0,0,0,0.64)';
+    ctx.fillRect(24, 120, W-48, 320);
+    ctx.fillStyle = '#fff';
+    ctx.font = '26px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('撞毁了！', W/2, 170);
+    ctx.font = '18px Arial';
+    ctx.fillText('最终得分: ' + Math.max(0, Math.floor(score)), W/2, 210);
+    ctx.fillText('里程: ' + Math.floor(distance) + 'm', W/2, 240);
+    ctx.fillStyle = '#ffd166';
+    roundRect(ctx, W/2 - 90, 280, 180, 46, 8, true, false);
+    ctx.fillStyle = '#072a1c';
+    ctx.font = '16px Arial';
+    ctx.fillText('再试一次', W/2, 310);
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#ddd';
+    ctx.fillText('高分: ' + highScore, W/2, 350);
+    ctx.textAlign = 'left';
+  }
+
+  // helpers
+  function roundRect(ctx, x, y, w, h, r, fill, stroke){
+    if (typeof r === 'undefined') r = 5;
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+    if(fill) ctx.fill();
+    if(stroke) ctx.stroke();
+  }
+
+  // Main loop
+  function loop(now){
+    const dt = Math.min(0.05, (now - lastTime) / 1000);
+    lastTime = now;
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // Input handlers
+  window.addEventListener('keydown', (e)=>{
+    keys[e.key] = true;
+    if(e.code === 'Space'){
+      braking = true;
+    }
+    if(state === 'menu' && (e.key === 'Enter' || e.code === 'Space')){
+      reset();
+      state = 'playing';
+    }
+    if(state === 'gameover' && (e.key === 'Enter' || e.code === 'Space')){
+      reset();
+      state = 'playing';
+    }
+  });
+  window.addEventListener('keyup', (e)=>{
+    keys[e.key] = false;
+    if(e.code === 'Space'){
+      braking = false;
+    }
+  });
+
+  // Mouse / pointer for braking and dragging
+  canvas.addEventListener('pointerdown', (e)=>{
+    pointerDown = true;
+    braking = true;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    touchX = (e.clientX - rect.left) * scaleX;
+    // if in menu or gameover, start/restart if tapping central button area
+    if(state === 'menu'){
+      // Start
+      reset();
+      state = 'playing';
+    } else if(state === 'gameover'){
+      // Restart
+      reset();
+      state = 'playing';
+    }
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener('pointermove', (e)=>{
+    if(!pointerDown) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    touchX = (e.clientX - rect.left) * scaleX;
+  });
+  canvas.addEventListener('pointerup', (e)=>{
+    pointerDown = false;
+    braking = false;
+    touchX = null;
+    try{ canvas.releasePointerCapture(e.pointerId); }catch(err){}
+  });
+  canvas.addEventListener('pointercancel', (e)=>{
+    pointerDown = false;
+    braking = false;
+    touchX = null;
+  });
+
+  // Click to toggle menu buttons (for devices where pointer isn't used)
+  canvas.addEventListener('click', function(e){
+    if(state === 'menu'){
+      reset();
+      state = 'playing';
+    } else if(state === 'gameover'){
+      reset();
+      state = 'playing';
+    }
+  });
+
+  // Start loop
+  lastTime = performance.now();
+  draw(); // initial draw
+  requestAnimationFrame(loop);
+
+  // Expose for debug (optional)
+  window.__game = { reset };
+})();
+</script>
+</body>
+</html>

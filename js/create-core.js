@@ -1,22 +1,22 @@
-ï»¿/**
- * GameAI - åˆ›å»ºé¡µé¢æ ¸å¿ƒåŠŸèƒ½æ¨¡å—
- * åŒ…å«ï¼šæ¸¸æˆç”Ÿæˆã€ä¿®æ”¹ã€ä¿å­˜åŠŸèƒ½
+/**
+ * GameAI - ´´½¨Ò³ÃæºËĞÄ¹¦ÄÜÄ£¿é
+ * °üº¬£ºÓÎÏ·Éú³É¡¢ĞŞ¸Ä¡¢±£´æ¹¦ÄÜ
  */
 
-// å…¨å±€å˜é‡
+// È«¾Ö±äÁ¿
 const API_URL = 'http://localhost:3000/api/generate';
 let currentGameCode = null;
 let currentVersion = 1;
 let currentGameId = null;
 
-// DOM å…ƒç´ 
+// DOM ÔªËØ
 const elements = {};
 
-// åˆå§‹åŒ–
+// ³õÊ¼»¯
 function init() {
-    console.log('ğŸ® åˆå§‹åŒ–åˆ›å»ºé¡µé¢...');
+    console.log('?? ³õÊ¼»¯´´½¨Ò³Ãæ...');
     
-    // ç¼“å­˜ DOM å…ƒç´ 
+    // »º´æ DOM ÔªËØ
     elements.prompt = document.getElementById('prompt');
     elements.generateBtn = document.getElementById('generateBtn');
     elements.progressSection = document.getElementById('progressSection');
@@ -32,15 +32,15 @@ function init() {
     elements.gameStats = document.getElementById('gameStats');
     elements.modifyPrompt = document.getElementById('modifyPrompt');
     
-    // ç»‘å®šäº‹ä»¶
+    // °ó¶¨ÊÂ¼ş
     bindEvents();
     
-    // æ£€æŸ¥ç¼–è¾‘çŠ¶æ€å¹¶åŠ è½½å¯¹è¯å†å²
+    // ¼ì²é±à¼­×´Ì¬²¢¼ÓÔØ¶Ô»°ÀúÊ·
     const editingGame = checkEditState();
     
-    // åˆå§‹åŒ–å¯¹è¯å†å²ç»„ä»¶
+    // ³õÊ¼»¯¶Ô»°ÀúÊ·×é¼ş
     if (window.ConversationUI) {
-        // å»¶è¿Ÿåˆå§‹åŒ–ï¼Œç­‰å¾…æ¸¸æˆ ID ç¡®å®š
+        // ÑÓ³Ù³õÊ¼»¯£¬µÈ´ıÓÎÏ· ID È·¶¨
         setTimeout(() => {
             if (currentGameId) {
                 ConversationUI.init(currentGameId);
@@ -48,32 +48,32 @@ function init() {
         }, 500);
     }
     
-    console.log('âœ… åˆå§‹åŒ–å®Œæˆ');
+    console.log('? ³õÊ¼»¯Íê³É');
 }
 
-// ç»‘å®šäº‹ä»¶
+// °ó¶¨ÊÂ¼ş
 function bindEvents() {
-    // çµæ„ŸæŒ‰é’®
+    // Áé¸Ğ°´Å¥
     document.getElementById('inspireBtn')?.addEventListener('click', showInspiration);
     
-    // è¾“å…¥æ¡†
+    // ÊäÈë¿ò
     elements.prompt?.addEventListener('input', handlePromptInput);
     
-    // ç”ŸæˆæŒ‰é’®
+    // Éú³É°´Å¥
     elements.generateBtn?.addEventListener('click', generateGame);
     
-    // ä¿®æ”¹æŒ‰é’®
+    // ĞŞ¸Ä°´Å¥
     document.getElementById('modifyBtn')?.addEventListener('click', enterModifyMode);
     document.getElementById('modifySubmitBtn')?.addEventListener('click', modifyGame);
     document.getElementById('modifyCancelBtn')?.addEventListener('click', cancelModify);
     
-    // æ–°æ¸¸æˆæŒ‰é’®
+    // ĞÂÓÎÏ·°´Å¥
     document.getElementById('newGameBtn')?.addEventListener('click', createNewGame);
     
-    // æ¸¸ç©æŒ‰é’®
+    // ÓÎÍæ°´Å¥
     document.getElementById('playBtn')?.addEventListener('click', playGame);
     
-    // ç¤ºä¾‹æç¤º
+    // Ê¾ÀıÌáÊ¾
     document.querySelectorAll('.prompt-chip').forEach(chip => {
         chip.addEventListener('click', () => {
             const prompt = chip.getAttribute('data-prompt');
@@ -85,13 +85,13 @@ function bindEvents() {
     });
 }
 
-// æ˜¾ç¤ºçµæ„Ÿ
+// ÏÔÊ¾Áé¸Ğ
 function showInspiration() {
     const prompts = [
-        'åˆ›å»ºä¸€ä¸ªå¤ªç©ºå°„å‡»æ¸¸æˆï¼Œç©å®¶æ§åˆ¶é£èˆ¹èº²é¿é™¨çŸ³å¹¶æ¶ˆç­æ•Œäºº',
-        'åˆ›å»ºä¸€ä¸ªåˆå¹¶å…»æˆæ¸¸æˆï¼Œé€šè¿‡åˆå¹¶ç”Ÿç‰©æ¥è¿›åŒ–',
-        'åˆ›å»ºä¸€ä¸ªå¹³å°è·³è·ƒæ¸¸æˆï¼Œæœ‰å„ç§æœºå…³å’Œæ•Œäºº',
-        'åˆ›å»ºä¸€ä¸ªå†œåœºæ¨¡æ‹Ÿæ¸¸æˆï¼Œç§æ¤ä½œç‰©å’Œå…»æ®–åŠ¨ç‰©'
+        '´´½¨Ò»¸öÌ«¿ÕÉä»÷ÓÎÏ·£¬Íæ¼Ò¿ØÖÆ·É´¬¶ã±ÜÔÉÊ¯²¢ÏûÃğµĞÈË',
+        '´´½¨Ò»¸öºÏ²¢Ñø³ÉÓÎÏ·£¬Í¨¹ıºÏ²¢ÉúÎïÀ´½ø»¯',
+        '´´½¨Ò»¸öÆ½Ì¨ÌøÔ¾ÓÎÏ·£¬ÓĞ¸÷ÖÖ»ú¹ØºÍµĞÈË',
+        '´´½¨Ò»¸öÅ©³¡Ä£ÄâÓÎÏ·£¬ÖÖÖ²×÷ÎïºÍÑøÖ³¶¯Îï'
     ];
     const random = prompts[Math.floor(Math.random() * prompts.length)];
     if (elements.prompt) {
@@ -100,7 +100,7 @@ function showInspiration() {
     }
 }
 
-// å¤„ç†è¾“å…¥
+// ´¦ÀíÊäÈë
 function handlePromptInput() {
     const hasContent = elements.prompt?.value.trim().length > 0;
     if (elements.generateBtn) {
@@ -108,7 +108,7 @@ function handlePromptInput() {
     }
 }
 
-// æ›´æ–°è¿›åº¦
+// ¸üĞÂ½ø¶È
 function updateProgress(percent, text) {
     if (elements.progressFill) {
         elements.progressFill.style.width = percent + '%';
@@ -118,25 +118,25 @@ function updateProgress(percent, text) {
     }
 }
 
-// ç”Ÿæˆæ¸¸æˆ
+// Éú³ÉÓÎÏ·
 async function generateGame() {
     const prompt = elements.prompt?.value.trim();
     if (!prompt) return;
     
-    // UI æ›´æ–°
+    // UI ¸üĞÂ
     if (elements.createForm) elements.createForm.style.display = 'none';
     if (elements.examplePrompts) elements.examplePrompts.style.display = 'none';
     if (elements.progressSection) elements.progressSection.style.display = 'block';
     if (elements.resultSection) elements.resultSection.style.display = 'none';
     
-    updateProgress(10, 'æ­£åœ¨åˆ†æä½ çš„æ¸¸æˆæƒ³æ³•...');
+    updateProgress(10, 'ÕıÔÚ·ÖÎöÄãµÄÓÎÏ·Ïë·¨...');
     
-    const fullPrompt = `è¯·åˆ›å»ºä¸€ä¸ªå®Œæ•´çš„ HTML5 æ¸¸æˆã€‚æ¸¸æˆæè¿°ï¼š${prompt}ã€‚è¦æ±‚ï¼š1.å•ä¸ª HTML æ–‡ä»¶ 2.ä½¿ç”¨ Canvas API 3.åŒ…å«å®Œæ•´æ¸¸æˆå¾ªç¯ 4.æœ‰å¾—åˆ†ç³»ç»Ÿ 5.ç¡®ä¿æœ‰è¶£å¯ç©ã€‚åªè¿”å› HTML ä»£ç ã€‚`;
+    const fullPrompt = `Çë´´½¨Ò»¸öÍêÕûµÄ HTML5 ÓÎÏ·¡£ÓÎÏ·ÃèÊö£º${prompt}¡£ÒªÇó£º1.µ¥¸ö HTML ÎÄ¼ş 2.Ê¹ÓÃ Canvas API 3.°üº¬ÍêÕûÓÎÏ·Ñ­»· 4.ÓĞµÃ·ÖÏµÍ³ 5.È·±£ÓĞÈ¤¿ÉÍæ¡£Ö»·µ»Ø HTML ´úÂë¡£`;
     
     try {
-        updateProgress(30, 'æ­£åœ¨è°ƒç”¨ AI æ¨¡å‹...');
+        updateProgress(30, 'ÕıÔÚµ÷ÓÃ AI Ä£ĞÍ...');
         
-        // ä¿å­˜ç”¨æˆ·å¯¹è¯
+        // ±£´æÓÃ»§¶Ô»°
         if (window.ConversationUI && currentGameId) {
             ConversationUI.addMessage('user', prompt);
         }
@@ -145,9 +145,9 @@ async function generateGame() {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                model: 'claude-opus-4-6',
+                model: API_CONFIG.model,
                 messages: [
-                    {role: 'system', content: 'ä½ æ˜¯ä¸“ä¸šçš„æ¸¸æˆå¼€å‘ AI åŠ©æ‰‹ã€‚'},
+                    {role: 'system', content: 'ÄãÊÇ×¨ÒµµÄÓÎÏ·¿ª·¢ AI ÖúÊÖ¡£'},
                     {role: 'user', content: fullPrompt}
                 ],
                 max_tokens: 16000,
@@ -156,29 +156,29 @@ async function generateGame() {
         });
         
         if (!response.ok) {
-            throw new Error('API é”™è¯¯ï¼š' + response.status);
+            throw new Error('API ´íÎó£º' + response.status);
         }
         
-        updateProgress(60, 'æ­£åœ¨å¤„ç†ç”Ÿæˆçš„ä»£ç ...');
+        updateProgress(60, 'ÕıÔÚ´¦ÀíÉú³ÉµÄ´úÂë...');
         
         const result = await response.json();
         let gameCode = result.choices?.[0]?.message?.content;
         
         if (!gameCode) {
-            throw new Error('API è¿”å›æ•°æ®ä¸ºç©º');
+            throw new Error('API ·µ»ØÊı¾İÎª¿Õ');
         }
         
-        // ä¿å­˜ AI å¯¹è¯
+        // ±£´æ AI ¶Ô»°
         if (window.ConversationUI && currentGameId) {
-            ConversationUI.addMessage('assistant', 'æ¸¸æˆå·²ç”Ÿæˆï¼ä»£ç é•¿åº¦ï¼š' + gameCode.length + ' å­—ç¬¦');
+            ConversationUI.addMessage('assistant', 'ÓÎÏ·ÒÑÉú³É£¡´úÂë³¤¶È£º' + gameCode.length + ' ×Ö·û');
         }
         
-        // æ¸…ç†ä»£ç 
+        // ÇåÀí´úÂë
         gameCode = extractHtmlCode(gameCode);
         currentGameCode = gameCode;
         currentVersion = 1;
         
-        updateProgress(100, 'æ¸¸æˆç”Ÿæˆå®Œæˆï¼');
+        updateProgress(100, 'ÓÎÏ·Éú³ÉÍê³É£¡');
         
         setTimeout(() => {
             if (elements.progressSection) elements.progressSection.style.display = 'none';
@@ -186,26 +186,26 @@ async function generateGame() {
             
             showGameResult(prompt, gameCode);
             
-            // ä¿å­˜åˆ°"æˆ‘çš„æ¸¸æˆ"
+            // ±£´æµ½"ÎÒµÄÓÎÏ·"
             saveToMyGames(gameCode, prompt);
         }, 500);
         
     } catch (error) {
-        console.error('ç”Ÿæˆå¤±è´¥:', error);
-        updateProgress(0, 'ç”Ÿæˆå¤±è´¥');
+        console.error('Éú³ÉÊ§°Ü:', error);
+        updateProgress(0, 'Éú³ÉÊ§°Ü');
         
-        // ä¿å­˜é”™è¯¯å¯¹è¯
+        // ±£´æ´íÎó¶Ô»°
         if (window.ConversationUI && currentGameId) {
-            ConversationUI.addMessage('system', 'ç”Ÿæˆå¤±è´¥ï¼š' + error.message);
+            ConversationUI.addMessage('system', 'Éú³ÉÊ§°Ü£º' + error.message);
         }
         
-        alert('ç”Ÿæˆå¤±è´¥ï¼š' + error.message);
+        alert('Éú³ÉÊ§°Ü£º' + error.message);
         if (elements.progressSection) elements.progressSection.style.display = 'none';
         if (elements.createForm) elements.createForm.style.display = 'block';
     }
 }
 
-// æå– HTML ä»£ç 
+// ÌáÈ¡ HTML ´úÂë
 function extractHtmlCode(text) {
     if (text.includes('```html')) {
         const start = text.indexOf('```html') + 7;
@@ -225,40 +225,40 @@ function extractHtmlCode(text) {
     return text;
 }
 
-// æ˜¾ç¤ºæ¸¸æˆç»“æœ
+// ÏÔÊ¾ÓÎÏ·½á¹û
 function showGameResult(prompt, gameCode) {
     const gameInfo = analyzePrompt(prompt);
     
     if (elements.gameTitle) elements.gameTitle.textContent = gameInfo.title;
     if (elements.gameDescription) elements.gameDescription.textContent = gameInfo.description;
-    if (elements.versionText) elements.versionText.textContent = 'ç‰ˆæœ¬ ' + currentVersion + '.0';
-    if (elements.gameStats) elements.gameStats.textContent = gameCode.length + ' å­—ç¬¦';
+    if (elements.versionText) elements.versionText.textContent = '°æ±¾ ' + currentVersion + '.0';
+    if (elements.gameStats) elements.gameStats.textContent = gameCode.length + ' ×Ö·û';
     
-    // åŠ è½½æ¸¸æˆåˆ° iframe
+    // ¼ÓÔØÓÎÏ·µ½ iframe
     if (elements.gameFrame) {
         elements.gameFrame.srcdoc = gameCode;
     }
 }
 
-// åˆ†ææç¤º
+// ·ÖÎöÌáÊ¾
 function analyzePrompt(prompt) {
     const p = prompt.toLowerCase();
-    if (p.includes('å°„å‡»') || p.includes('å¤ªç©º')) {
-        return {title: 'æ˜Ÿé™…æˆ˜å£«', description: 'å¤ªç©ºå°„å‡»æ¸¸æˆ', type: 'åŠ¨ä½œ', style: 'ç§‘å¹»'};
-    } else if (p.includes('åˆå¹¶') || p.includes('è¿›åŒ–')) {
-        return {title: 'è¿›åŒ–åˆå¹¶', description: 'åˆå¹¶å…»æˆæ¸¸æˆ', type: 'ä¼‘é—²', style: 'å¯çˆ±'};
-    } else if (p.includes('å¹³å°') || p.includes('è·³è·ƒ')) {
-        return {title: 'è·³è·ƒå‹‡å£«', description: 'å¹³å°è·³è·ƒæ¸¸æˆ', type: 'å†’é™©', style: 'åƒç´ '};
-    } else if (p.includes('å†œåœº')) {
-        return {title: 'æ¬¢ä¹å†œåœº', description: 'å†œåœºæ¨¡æ‹Ÿæ¸¸æˆ', type: 'æ¨¡æ‹Ÿ', style: 'å¡é€š'};
+    if (p.includes('Éä»÷') || p.includes('Ì«¿Õ')) {
+        return {title: 'ĞÇ¼ÊÕ½Ê¿', description: 'Ì«¿ÕÉä»÷ÓÎÏ·', type: '¶¯×÷', style: '¿Æ»Ã'};
+    } else if (p.includes('ºÏ²¢') || p.includes('½ø»¯')) {
+        return {title: '½ø»¯ºÏ²¢', description: 'ºÏ²¢Ñø³ÉÓÎÏ·', type: 'ĞİÏĞ', style: '¿É°®'};
+    } else if (p.includes('Æ½Ì¨') || p.includes('ÌøÔ¾')) {
+        return {title: 'ÌøÔ¾ÓÂÊ¿', description: 'Æ½Ì¨ÌøÔ¾ÓÎÏ·', type: 'Ã°ÏÕ', style: 'ÏñËØ'};
+    } else if (p.includes('Å©³¡')) {
+        return {title: '»¶ÀÖÅ©³¡', description: 'Å©³¡Ä£ÄâÓÎÏ·', type: 'Ä£Äâ', style: '¿¨Í¨'};
     }
-    return {title: 'å¥‡å¹»å†’é™©', description: 'å†’é™©æ¸¸æˆ', type: 'å†’é™©', style: 'å¡é€š'};
+    return {title: 'Ææ»ÃÃ°ÏÕ', description: 'Ã°ÏÕÓÎÏ·', type: 'Ã°ÏÕ', style: '¿¨Í¨'};
 }
 
-// ä¿å­˜åˆ°"æˆ‘çš„æ¸¸æˆ"
+// ±£´æµ½"ÎÒµÄÓÎÏ·"
 function saveToMyGames(gameCode, prompt) {
     if (!window.GameStorage) {
-        console.warn('âš ï¸ GameStorage æ¨¡å—æœªåŠ è½½');
+        console.warn('?? GameStorage Ä£¿éÎ´¼ÓÔØ');
         return;
     }
     
@@ -281,11 +281,11 @@ function saveToMyGames(gameCode, prompt) {
     
     const result = GameStorage.saveGame(gameData);
     if (result) {
-        console.log('ğŸ’¾ æ¸¸æˆå·²ä¿å­˜åˆ°"æˆ‘çš„æ¸¸æˆ":', currentGameId);
+        console.log('?? ÓÎÏ·ÒÑ±£´æµ½"ÎÒµÄÓÎÏ·":', currentGameId);
     }
 }
 
-// è¿›å…¥ä¿®æ”¹æ¨¡å¼
+// ½øÈëĞŞ¸ÄÄ£Ê½
 function enterModifyMode() {
     if (elements.resultSection) elements.resultSection.style.display = 'none';
     if (elements.modifySection) elements.modifySection.style.display = 'block';
@@ -293,13 +293,13 @@ function enterModifyMode() {
     if (elements.modifyPrompt) elements.modifyPrompt.focus();
 }
 
-// å–æ¶ˆä¿®æ”¹
+// È¡ÏûĞŞ¸Ä
 function cancelModify() {
     if (elements.modifySection) elements.modifySection.style.display = 'none';
     if (elements.resultSection) elements.resultSection.style.display = 'block';
 }
 
-// ä¿®æ”¹æ¸¸æˆ
+// ĞŞ¸ÄÓÎÏ·
 async function modifyGame() {
     const modifyText = elements.modifyPrompt?.value.trim();
     if (!modifyText || !currentGameCode) return;
@@ -307,25 +307,25 @@ async function modifyGame() {
     if (elements.modifySection) elements.modifySection.style.display = 'none';
     if (elements.progressSection) elements.progressSection.style.display = 'block';
     
-    updateProgress(10, 'æ­£åœ¨åˆ†æä¿®æ”¹éœ€æ±‚...');
+    updateProgress(10, 'ÕıÔÚ·ÖÎöĞŞ¸ÄĞèÇó...');
     
-    // ä¿å­˜ç”¨æˆ·å¯¹è¯
+    // ±£´æÓÃ»§¶Ô»°
     if (window.ConversationUI && currentGameId) {
-        ConversationUI.addMessage('user', 'ä¿®æ”¹è¦æ±‚ï¼š' + modifyText);
+        ConversationUI.addMessage('user', 'ĞŞ¸ÄÒªÇó£º' + modifyText);
     }
     
-    const modifyPromptText = `è¯·ä¿®æ”¹ä»¥ä¸‹æ¸¸æˆä»£ç ã€‚ä¿®æ”¹è¦æ±‚ï¼š${modifyText}ã€‚åŸæ¸¸æˆä»£ç ï¼š${currentGameCode.substring(0, 10000)}ã€‚è¿”å›å®Œæ•´çš„ HTML ä»£ç ã€‚`;
+    const modifyPromptText = `ÇëĞŞ¸ÄÒÔÏÂÓÎÏ·´úÂë¡£ĞŞ¸ÄÒªÇó£º${modifyText}¡£Ô­ÓÎÏ·´úÂë£º${currentGameCode.substring(0, 10000)}¡£·µ»ØÍêÕûµÄ HTML ´úÂë¡£`;
     
     try {
-        updateProgress(30, 'æ­£åœ¨è°ƒç”¨ AI æ¨¡å‹...');
+        updateProgress(30, 'ÕıÔÚµ÷ÓÃ AI Ä£ĞÍ...');
         
         const response = await fetch(API_URL, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                model: 'claude-opus-4-6',
+                model: API_CONFIG.model,
                 messages: [
-                    {role: 'system', content: 'ä½ æ˜¯ä¸“ä¸šçš„æ¸¸æˆå¼€å‘ AI åŠ©æ‰‹ï¼Œæ“…é•¿ä¿®æ”¹å’Œä¼˜åŒ–æ¸¸æˆä»£ç ã€‚'},
+                    {role: 'system', content: 'ÄãÊÇ×¨ÒµµÄÓÎÏ·¿ª·¢ AI ÖúÊÖ£¬ÉÃ³¤ĞŞ¸ÄºÍÓÅ»¯ÓÎÏ·´úÂë¡£'},
                     {role: 'user', content: modifyPromptText}
                 ],
                 max_tokens: 16000,
@@ -334,59 +334,59 @@ async function modifyGame() {
         });
         
         if (!response.ok) {
-            throw new Error('API é”™è¯¯ï¼š' + response.status);
+            throw new Error('API ´íÎó£º' + response.status);
         }
         
-        updateProgress(60, 'æ­£åœ¨å¤„ç†ä¿®æ”¹åçš„ä»£ç ...');
+        updateProgress(60, 'ÕıÔÚ´¦ÀíĞŞ¸ÄºóµÄ´úÂë...');
         
         const result = await response.json();
         let gameCode = result.choices?.[0]?.message?.content;
         
         if (!gameCode) {
-            throw new Error('API è¿”å›æ•°æ®ä¸ºç©º');
+            throw new Error('API ·µ»ØÊı¾İÎª¿Õ');
         }
         
-        // ä¿å­˜ AI å¯¹è¯
+        // ±£´æ AI ¶Ô»°
         if (window.ConversationUI && currentGameId) {
-            ConversationUI.addMessage('assistant', 'ä¿®æ”¹å®Œæˆï¼æ–°ä»£ç é•¿åº¦ï¼š' + gameCode.length + ' å­—ç¬¦');
+            ConversationUI.addMessage('assistant', 'ĞŞ¸ÄÍê³É£¡ĞÂ´úÂë³¤¶È£º' + gameCode.length + ' ×Ö·û');
         }
         
         gameCode = extractHtmlCode(gameCode);
         currentGameCode = gameCode;
         currentVersion++;
         
-        updateProgress(100, 'ä¿®æ”¹å®Œæˆï¼');
+        updateProgress(100, 'ĞŞ¸ÄÍê³É£¡');
         
         setTimeout(() => {
             if (elements.progressSection) elements.progressSection.style.display = 'none';
             if (elements.resultSection) elements.resultSection.style.display = 'block';
             
-            if (elements.versionText) elements.versionText.textContent = 'ç‰ˆæœ¬ ' + currentVersion + '.0';
-            if (elements.gameStats) elements.gameStats.textContent = gameCode.length + ' å­—ç¬¦';
+            if (elements.versionText) elements.versionText.textContent = '°æ±¾ ' + currentVersion + '.0';
+            if (elements.gameStats) elements.gameStats.textContent = gameCode.length + ' ×Ö·û';
             
             if (elements.gameFrame) {
                 elements.gameFrame.srcdoc = gameCode;
             }
             
-            // æ›´æ–°"æˆ‘çš„æ¸¸æˆ"
+            // ¸üĞÂ"ÎÒµÄÓÎÏ·"
             updateMyGames(gameCode);
         }, 500);
         
     } catch (error) {
-        console.error('ä¿®æ”¹å¤±è´¥:', error);
+        console.error('ĞŞ¸ÄÊ§°Ü:', error);
         
-        // ä¿å­˜é”™è¯¯å¯¹è¯
+        // ±£´æ´íÎó¶Ô»°
         if (window.ConversationUI && currentGameId) {
-            ConversationUI.addMessage('system', 'ä¿®æ”¹å¤±è´¥ï¼š' + error.message);
+            ConversationUI.addMessage('system', 'ĞŞ¸ÄÊ§°Ü£º' + error.message);
         }
         
-        alert('ä¿®æ”¹å¤±è´¥ï¼š' + error.message);
+        alert('ĞŞ¸ÄÊ§°Ü£º' + error.message);
         if (elements.progressSection) elements.progressSection.style.display = 'none';
         if (elements.modifySection) elements.modifySection.style.display = 'block';
     }
 }
 
-// æ›´æ–°"æˆ‘çš„æ¸¸æˆ"
+// ¸üĞÂ"ÎÒµÄÓÎÏ·"
 function updateMyGames(gameCode) {
     if (!currentGameId || !window.GameStorage) return;
     
@@ -398,13 +398,13 @@ function updateMyGames(gameCode) {
     });
     
     if (result) {
-        console.log('ğŸ’¾ æ¸¸æˆå·²æ›´æ–°åˆ°"æˆ‘çš„æ¸¸æˆ"');
+        console.log('?? ÓÎÏ·ÒÑ¸üĞÂµ½"ÎÒµÄÓÎÏ·"');
     }
 }
 
-// åˆ›å»ºæ–°æ¸¸æˆ
+// ´´½¨ĞÂÓÎÏ·
 function createNewGame() {
-    if (!confirm('ç¡®å®šè¦åˆ›å»ºæ–°æ¸¸æˆå—ï¼Ÿ')) return;
+    if (!confirm('È·¶¨Òª´´½¨ĞÂÓÎÏ·Âğ£¿')) return;
     
     currentGameCode = null;
     currentVersion = 1;
@@ -420,7 +420,7 @@ function createNewGame() {
     handlePromptInput();
 }
 
-// æ’­æ”¾æ¸¸æˆ
+// ²¥·ÅÓÎÏ·
 function playGame() {
     if (!currentGameCode) return;
     
@@ -429,11 +429,11 @@ function playGame() {
         win.document.open();
         win.document.write(currentGameCode);
         win.document.close();
-        win.document.title = 'AI æ¸¸æˆ v' + currentVersion;
+        win.document.title = 'AI ÓÎÏ· v' + currentVersion;
     }
 }
 
-// æ£€æŸ¥ç¼–è¾‘çŠ¶æ€
+// ¼ì²é±à¼­×´Ì¬
 function checkEditState() {
     const params = new URLSearchParams(window.location.search);
     const editId = params.get('edit');
@@ -447,20 +447,20 @@ function checkEditState() {
                     currentGameId = game.id;
                     currentGameCode = game.code;
                     currentVersion = game.version || 1;
-                    console.log('âœ… åŠ è½½ç¼–è¾‘ä¸­çš„æ¸¸æˆ:', currentGameId);
+                    console.log('? ¼ÓÔØ±à¼­ÖĞµÄÓÎÏ·:', currentGameId);
                 }
             } catch (e) {
-                console.error('âŒ è§£æç¼–è¾‘æ•°æ®å¤±è´¥:', e);
+                console.error('? ½âÎö±à¼­Êı¾İÊ§°Ü:', e);
             }
         }
     }
 }
 
-// é¡µé¢åŠ è½½å®Œæˆååˆå§‹åŒ–
+// Ò³Ãæ¼ÓÔØÍê³Éºó³õÊ¼»¯
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
     init();
 }
 
-console.log('âœ… create-core.js å·²åŠ è½½');
+console.log('? create-core.js ÒÑ¼ÓÔØ');

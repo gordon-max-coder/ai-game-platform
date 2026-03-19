@@ -84,13 +84,24 @@ const GameStorage = (function() {
                     return this.updateGame(gameData.id, gameData);
                 }
 
-                // 添加新游戏（放到最前面）
-                games.unshift({
+                // 🏗️ 保存构建历史 - 关键修复！
+                const gameToSave = {
                     ...gameData,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString(),
                     storageVersion: VERSION
-                });
+                };
+                
+                // 如果 gameData 包含构建历史，一并保存
+                if (gameData.buildHistory) {
+                    gameToSave.buildHistory = gameData.buildHistory;
+                }
+                if (gameData.originalGameType) {
+                    gameToSave.originalGameType = gameData.originalGameType;
+                }
+
+                // 添加新游戏（放到最前面）
+                games.unshift(gameToSave);
 
                 if (safeSetStorage(games)) {
                     console.log('✅ 游戏已保存:', gameData.id);

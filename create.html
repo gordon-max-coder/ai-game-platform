@@ -7,6 +7,26 @@
     <link rel="stylesheet" href="css/header.css">
     <link rel="stylesheet" href="css/navigation.css">
     <link rel="stylesheet" href="css/create-layout.css">
+    <link rel="stylesheet" href="css/game-editor.css">
+    <style>
+        /* 编辑器模态框特殊样式 */
+        .editor-modal-content {
+            max-width: 95vw !important;
+            width: 95vw !important;
+            height: 90vh !important;
+            padding: 0 !important;
+        }
+        
+        .editor-modal-body {
+            padding: 0 !important;
+            height: calc(90vh - 50px) !important;
+            overflow: hidden !important;
+        }
+        
+        .editor-container {
+            height: 100% !important;
+        }
+    </style>
 </head>
 <body>
     <!-- 顶部导航 -->
@@ -99,6 +119,25 @@
                         </div>
                         
                         <button class="btn-inspire" id="inspireBtn">🎲 灵感</button>
+                        
+                        <!-- 模型选择下拉框 -->
+                        <div class="model-selector">
+                            <label for="modelSelect" class="model-label">🤖 模型选择</label>
+                            <select id="modelSelect" class="model-select">
+                                <option value="claude-opus-4-6">Claude Opus 4.6 (旗舰质量⭐⭐⭐⭐⭐)</option>
+                                <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (高质量⭐⭐⭐⭐)</option>
+                                <option value="gpt-5.4">GPT-5.4 (最强 GPT🚀)</option>
+                                <option value="gpt-5-mini">GPT-5 Mini (平衡选择⚖️)</option>
+                                <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Flash Lite (快速⚡)</option>
+                                <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (性价比⭐⭐⭐⭐⭐)</option>
+                                <option value="xiaomi/mimo-v2-flash">MiMo V2 Flash ⚡ (超快速🚀)</option>
+                                <option value="xiaomi/mimo-v2-pro">MiMo V2 Pro 🚀 (OpenRouter 新模型)</option>
+                            </select>
+                            <div class="model-hint">
+                                <span>💡 不同模型质量和成本不同，默认推荐性价比最优</span>
+                            </div>
+                        </div>
+                        
                         <div class="input-tips">
                             <span>💡 提示：描述越详细，生成的游戏越符合预期</span>
                         </div>
@@ -112,6 +151,8 @@
                         <div class="preview-actions" id="previewActions" style="display: none;">
                             <button class="btn-action" id="codeBtn">📄 代码</button>
                             <button class="btn-action" id="playBtn">▶️ 试玩</button>
+                            <button class="btn-action" id="editorBtn" title="打开编辑器">🎮 编辑器</button>
+                            <button class="btn-action" id="godotBtn" title="导出为 Godot 项目">🛠️ Godot</button>
                             <button class="btn-action" id="modifyBtn">✏️ 修改</button>
                         </div>
                     </div>
@@ -121,7 +162,7 @@
                             <div class="placeholder-icon">🎨</div>
                             <p>游戏生成后会在这里显示</p>
                         </div>
-                        <iframe class="game-frame" id="gameFrame" style="display: none;"></iframe>
+                        <iframe class="game-frame" id="gameFrame" style="display: none;" sandbox="allow-scripts allow-same-origin"></iframe>
                     </div>
 
                     <!-- 修改输入区（隐藏，点击修改后显示） -->
@@ -141,6 +182,15 @@
 
                 <!-- 右侧 - 数值面板 -->
                 <div class="properties-section">
+                    <!-- API 状态栏 -->
+                    <div class="api-status-bar">
+                        <div class="api-status-info">
+                            <span class="api-provider-badge" id="apiProviderBadge">jiekou.ai</span>
+                            <span class="api-model-name" id="apiModelName">Claude Sonnet 3.5</span>
+                        </div>
+                        <button class="btn-api-switch" id="apiSwitchBtn" title="切换 API 厂商">🔄</button>
+                    </div>
+                    
                     <div class="properties-header">
                         <h3>⚙️ 游戏参数</h3>
                     </div>
@@ -161,10 +211,104 @@
     <script src="js/navbar.js"></script>
     <script src="js/user-state.js"></script>
     <script src="js/game-analyzer.js"></script>
-            <script src="js/inspiration.js"></script>
+    <script src="js/inspiration.js"></script>
     <script src="js/show-code.js"></script>
-        <script src="js/show-code.js"></script>
-    <script src="js/create-new.js"></script>
+    <script src="js/code-modifier.js"></script>
+    <script src="js/game-editor.js"></script>
+    <script src="js/api-config.js?v=12"></script>
+    <script src="js/game-history.js"></script>
+    <script src="js/create-new.js?v=39"></script>
+    <script src="js/godot-editor-integration.js"></script>
+
+    <!-- API Switch Modal -->
+    <div id="apiSwitchModal" class="code-modal" style="display: none;">
+        <div class="code-overlay"></div>
+        <div class="code-content" style="max-width: 500px;">
+            <div class="code-header">
+                <h3>🔄 切换 API 厂商</h3>
+                <button class="btn-close" id="closeApiSwitchBtn">&times;</button>
+            </div>
+            <div class="code-body">
+                <div class="api-provider-list">
+                    <div class="api-provider-item" data-provider="jiekou">
+                        <div class="provider-info">
+                            <h4>jiekou.ai</h4>
+                            <p>主要推荐，质量稳定</p>
+                        </div>
+                        <div class="provider-models">
+                            <button class="model-btn" data-model="claude-sonnet-3-5">
+                                <span class="model-name">Claude Sonnet 3.5</span>
+                                <span class="model-cost">$0.02-0.08/game</span>
+                            </button>
+                            <button class="model-btn" data-model="claude-opus-4-6">
+                                <span class="model-name">Claude Opus 4.6</span>
+                                <span class="model-cost">$0.10-0.39/game</span>
+                            </button>
+                            <button class="model-btn" data-model="claude-sonnet-4-6">
+                                <span class="model-name">Claude Sonnet 4.6</span>
+                                <span class="model-cost">$0.02-0.08/game</span>
+                            </button>
+                            <button class="model-btn" data-model="gpt-5.4">
+                                <span class="model-name">GPT-5.4 🚀</span>
+                                <span class="model-cost">$0.015/1K input, $0.06/1K output</span>
+                            </button>
+                            <button class="model-btn" data-model="gpt-5-mini">
+                                <span class="model-name">GPT-5 Mini</span>
+                                <span class="model-cost">$0.225/1M input, $1.8/1M output</span>
+                            </button>
+                            <button class="model-btn" data-model="gemini-3.1-flash-lite-preview">
+                                <span class="model-name">Gemini 3.1 Flash Lite</span>
+                                <span class="model-cost">$0.25/1M input, $1.5/1M output</span>
+                            </button>
+                            <button class="model-btn" data-model="gemini-2.5-flash">
+                                <span class="model-name">Gemini 2.5 Flash</span>
+                                <span class="model-cost">$0.27/1M input, $2.25/1M output</span>
+                            </button>
+                            <button class="model-btn" data-model="xiaomi/mimo-v2-flash">
+                                <span class="model-name">MiMo V2 Flash ⚡</span>
+                                <span class="model-cost">$0.10/1M input, $0.50/1M output</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="api-provider-item" data-provider="aliyun">
+                        <div class="provider-info">
+                            <h4>阿里云百炼</h4>
+                            <p>国产模型，快速响应</p>
+                        </div>
+                        <div class="provider-models">
+                            <button class="model-btn" data-model="qwen-max">
+                                <span class="model-name">Qwen Max</span>
+                                <span class="model-cost">¥0.04/1K tokens</span>
+                            </button>
+                            <button class="model-btn active" data-model="qwen-plus">
+                                <span class="model-name">Qwen3.5-Plus</span>
+                                <span class="model-cost">¥0.02/1K tokens</span>
+                            </button>
+                            <button class="model-btn" data-model="qwen-turbo">
+                                <span class="model-name">Qwen Turbo</span>
+                                <span class="model-cost">¥0.008/1K tokens</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="api-provider-item" data-provider="openrouter">
+                        <div class="provider-info">
+                            <h4>OpenRouter 🌐</h4>
+                            <p>全球模型聚合平台</p>
+                        </div>
+                        <div class="provider-models">
+                            <button class="model-btn active" data-model="xiaomi/mimo-v2-pro">
+                                <span class="model-name">MiMo V2 Pro 🚀</span>
+                                <span class="model-cost">$0.50/1M input, $2.00/1M output</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="api-switch-footer">
+                    <button class="btn-confirm" id="confirmApiSwitch">✅ 确认切换</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Code View Modal -->
     <div id="codeModal" class="code-modal" style="display: none;">
@@ -184,20 +328,59 @@
         </div>
     </div>
 
-    <!-- Code View Modal -->
-    <div id="codeModal" class="code-modal" style="display: none;">
+    <!-- Game Editor Modal -->
+    <div id="editorModal" class="code-modal" style="display: none;">
         <div class="code-overlay"></div>
-        <div class="code-content">
+        <div class="code-content editor-modal-content">
             <div class="code-header">
-                <h3>📄 游戏代码</h3>
+                <h3>🎮 游戏编辑器</h3>
                 <div class="code-actions">
-                    <button class="btn-code-action" id="copyCodeBtn">📋 复制</button>
-                    <button class="btn-code-action" id="downloadCodeBtn">💾 下载</button>
-                    <button class="btn-close" id="closeCodeBtn">&times;</button>
+                    <button class="btn-code-action" id="closeEditorBtn">&times;</button>
                 </div>
             </div>
-            <div class="code-body">
-                <pre><code id="codeContent"></code></pre>
+            <div class="code-body editor-modal-body">
+                <div class="editor-container">
+                    <!-- 左侧 - 组件树 -->
+                    <div class="editor-sidebar-left">
+                        <div class="editor-section-title">📦 组件树</div>
+                        <div class="component-tree" id="componentTree">
+                            <!-- 动态生成 -->
+                        </div>
+                    </div>
+
+                    <!-- 中间 - 画布预览 -->
+                    <div class="editor-canvas">
+                        <div class="editor-toolbar">
+                            <button class="editor-btn" id="undoBtn" disabled>↩️ 撤销</button>
+                            <button class="editor-btn primary" id="runBtn">▶️ 运行</button>
+                            <button class="editor-btn" id="stopBtn" disabled>⏹️ 停止</button>
+                            <button class="editor-btn success" id="saveBtn">💾 保存</button>
+                            <button class="editor-btn" id="exportBtn">📦 导出</button>
+                        </div>
+                        <div class="canvas-preview" id="canvasPreview">
+                            <!-- iframe 游戏预览 -->
+                        </div>
+                    </div>
+
+                    <!-- 右侧 - 属性面板 -->
+                    <div class="editor-sidebar-right">
+                        <div class="editor-section-title">⚙️ 属性</div>
+                        <div class="property-panel" id="propertyPanel">
+                            <div class="property-empty">未选择对象</div>
+                        </div>
+                    </div>
+
+                    <!-- 底部 - 代码编辑器 -->
+                    <div class="editor-code-panel">
+                        <div class="code-editor-header">
+                            <span class="code-editor-title">📝 代码编辑器</span>
+                            <div class="code-editor-actions">
+                                <button class="editor-btn" id="applyCodeBtn">✅ 应用</button>
+                            </div>
+                        </div>
+                        <textarea class="code-editor" id="codeEditor" spellcheck="false"></textarea>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

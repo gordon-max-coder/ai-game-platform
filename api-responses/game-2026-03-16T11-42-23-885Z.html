@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>魔性恶搞飞翔鸟</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #111;
+    font-family: "Microsoft YaHei", Arial, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  #wrap {
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  canvas {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    background: #87ceeb;
+    box-shadow: 0 10px 40px rgba(0,0,0,.45);
+    border-radius: 12px;
+  }
+  #retryBtn {
+    position: absolute;
+    left: 50%;
+    top: 72%;
+    transform: translate(-50%, -50%);
+    padding: 14px 24px;
+    font-size: 22px;
+    font-weight: bold;
+    border: none;
+    border-radius: 999px;
+    color: #fff;
+    background: linear-gradient(135deg, #ff4d4d, #ff9a00);
+    cursor: pointer;
+    box-shadow: 0 10px 24px rgba(255,100,0,.3);
+    display: none;
+    z-index: 10;
+    white-space: nowrap;
+  }
+  #retryBtn:hover {
+    transform: translate(-50%, -50%) scale(1.06);
+  }
+  #flash, #bsod, #congrats {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    z-index: 20;
+    color: white;
+    font-weight: bold;
+    pointer-events: none;
+  }
+  #flash { background: rgba(255,255,255,.92); color: #111; font-size: 48px; }
+  #bsod {
+    background: #0037da;
+    font-size: 22px;
+    line-height: 1.7;
+    padding: 24px;
+    box-sizing: border-box;
+  }
+  #congrats {
+    background: radial-gradient(circle, rgba(255,255,255,.1), rgba(255,255,255,0) 60%);
+    font-size: 34px;
+    text-shadow: 0 4px 10px rgba(0,0,0,.45);
+  }
+  .shake {
+    animation: shake 0.5s infinite linear;
+  }
+  @keyframes shake {
+    0% { transform: translate(0,0) rotate(0deg); }
+    20% { transform: translate(-4px,2px) rotate(-1deg); }
+    40% { transform: translate(4px,-2px) rotate(1deg); }
+    60% { transform: translate(-5px,-1px) rotate(0deg); }
+    80% { transform: translate(5px,2px) rotate(1deg); }
+    100% { transform: translate(0,0) rotate(0deg); }
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <button id="retryBtn">再次挑战</button>
+  <div id="flash">啊？</div>
+  <div id="bsod">
+    <div>
+      你的开始按钮遇到了一点问题，需要重启脑子。<br><br>
+      :( <br><br>
+      错误代码：START_BUTTON_NOT_FOUND<br>
+      正在尝试恢复中……<br><br>
+      0% 完成
+    </div>
+  </div>
+  <div id="congrats">恭喜！你终于点进游戏了！</div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+canvas.width = 360;
+canvas.height = 640;
+
+const wrap = document.getElementById('wrap');
+const retryBtn = document.getElementById('retryBtn');
+const flash = document.getElementById('flash');
+const bsod = document.getElementById('bsod');
+const congrats = document.getElementById('congrats');
+
+let gameState = 'start'; // start, prank, playing, gameover, transitioning
+let lastTime = 0;
+let score = 0;
+let bestScore = +localStorage.getItem('weirdFlappyBest') || 0;
+let startClickCount = 0;
+let requiredStartClicks = Math.floor(Math.random() * 4) + 4; // 4~7 次后才可能进入
+let prankText = '';
+let prankTimer = 0;
+let transitionTimer = 0;
+let stars = [];
+let confetti = [];
+let cracks = [];
+
+const gravity = 0.38;
+const flapPower = -6.8;
+const pipeWidth = 64;
+const pipeGap = 165;
+const pipeSpeed = 2.35;
+const groundH = 100;
+
+const bird = {
+  x: 92,
+  y: 280,
+  vy: 0,
+  r: 16,
+  rot: 0
+};
+
+let pipes = [];
+
+function resetGame() {
+  score = 0;
+  bird.x = 92;
+  bird.y = 280;
+  bird.vy = 0;
+  bird.rot = 0;
+  pipes = [];
+  spawnPipe(canvas.width + 80);
+  spawnPipe(canvas.width + 260);
+  spawnPipe(canvas.width + 440);
+  retryBtn.style.display = 'none';
+  gameState = 'playing';
+}
+
+function spawnPipe(x) {
+  const minTop = 80;
+  const maxTop = canvas.height - groundH - pipeGap - 80;
+  const topH = Math.random() * (maxTop - minTop) + minTop;
+  pipes.push({
+    x,
+    topH,
+    passed: false
+  });
+}
+
+function createStars() {
+  stars = [];
+  for (let i = 0; i < 18; i++) {
+    stars.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 2 + 1,
+      s: Math.random() * 0.8 + 0.2
+    });
+  }
+}
+createStars();
+
+function createConfetti() {
+  confetti = [];
+  for (let i = 0; i < 80; i++) {
+    confetti.push({
+      x: canvas.width / 2,
+      y: canvas.height / 2,
+      vx: (Math.random() - 0.5) * 8,
+      vy: (Math.random() - 0.8) * 8,
+      size: Math.random() * 8 + 4,
+      color: `hsl(${Math.random()*360}, 90%, 60%)`,
+      life: Math.random() * 60 + 40
+    });
+  }
+}
+
+function createCracks() {
+  cracks = [];
+  for (let i = 0; i < 12; i++) {
+    const sx = Math.random() * canvas.width;
+    const sy = Math.random() * canvas.height;
+    const segs = [];
+    let x = sx, y = sy;
+    for (let j = 0; j < 6; j++) {
+      x += (Math.random() - 0.5) * 50;
+      y += (Math.random() - 0.5) * 50;
+      segs.push({x, y});
+    }
+    cracks.push({ sx, sy, segs });
+  }
+}
+
+function playPrank() {
+  gameState = 'prank';
+  prankTimer = 0;
+  const possible = ['shake', 'flash', 'bsod', 'crack', 'fakeStart', 'laugh', 'loading'];
+  prankText = possible[Math.floor(Math.random() * possible.length)];
+
+  if (prankText === 'shake') {
+    wrap.classList.add('shake');
+    setTimeout(() => {
+      wrap.classList.remove('shake');
+      gameState = 'start';
+    }, 900);
+  } else if (prankText === 'flash') {
+    flash.style.display = 'flex';
+    flash.textContent = ['啊？', '点歪了吧？', '系统拒绝开始', '开始按钮害羞了'][Math.floor(Math.random()*4)];
+    setTimeout(() => {
+      flash.style.display = 'none';
+      gameState = 'start';
+    }, 700);
+  } else if (prankText === 'bsod') {
+    bsod.style.display = 'flex';
+    let progress = 0;
+    const timer = setInterval(() => {
+      progress += Math.floor(Math.random() * 30) + 12;
+      if (progress > 100) progress = 100;
+      bsod.innerHTML = `<div>你的开始按钮遇到了一点问题，需要重启脑子。<br><br>:(<br><br>错误代码：START_BUTTON_NOT_FOUND<br>正在尝试恢复中……<br><br>${progress}% 完成</div>`;
+      if (progress >= 100) {
+        clearInterval(timer);
+        setTimeout(() => {
+          bsod.style.display = 'none';
+          gameState = 'start';
+        }, 320);
+      }
+    }, 140);
+  } else if (prankText === 'crack') {
+    createCracks();
+    setTimeout(() => {
+      cracks = [];
+      gameState = 'start';
+    }, 1000);
+  } else if (prankText === 'fakeStart') {
+    flash.style.display = 'flex';
+    flash.style.background = 'rgba(0,255,120,.9)';
+    flash.textContent = '开始成功！';
+    setTimeout(() => {
+      flash.textContent = '骗你的';
+      flash.style.background = 'rgba(255,255,255,.92)';
+    }, 400);
+    setTimeout(() => {
+      flash.style.display = 'none';
+      flash.style.background = 'rgba(255,255,255,.92)';
+      gameState = 'start';
+    }, 900);
+  } else if (prankText === 'laugh') {
+    flash.style.display = 'flex';
+    flash.textContent = '哈哈哈哈';
+    let n = 0;
+    const timer = setInterval(() => {
+      n++;
+      flash.textContent += '哈';
+      if (n > 6) {
+        clearInterval(timer);
+        flash.style.display = 'none';
+        gameState = 'start';
+      }
+    }, 120);
+  } else if (prankText === 'loading') {
+    flash.style.display = 'flex';
+    flash.style.fontSize = '28px';
+    let p = 0;
+    const timer = setInterval(() => {
+      p += Math.floor(Math.random() * 25);
+      if (p > 99) p = 99;
+      flash.textContent = '正在开始游戏… ' + p + '%';
+    }, 120);
+    setTimeout(() => {
+      clearInterval(timer);
+      flash.textContent = '加载失败';
+      setTimeout(() => {
+        flash.style.display = 'none';
+        flash.style.fontSize = '48px';
+        gameState = 'start';
+      }, 500);
+    }, 900);
+  }
+}
+
+function tryStartGame() {
+  if (gameState !== 'start') return;
+  startClickCount++;
+  const canActuallyStart = startClickCount >= requiredStartClicks && Math.random() < 0.42;
+  if (canActuallyStart) {
+    gameState = 'transitioning';
+    congrats.style.display = 'flex';
+    createConfetti();
+    setTimeout(() => {
+      congrats.style.display = 'none';
+      resetGame();
+      startClickCount = 0;
+      requiredStartClicks = Math.floor(Math.random() * 4) + 4;
+    }, 1400);
+  } else {
+    playPrank();
+  }
+}
+
+function flap() {
+  if (gameState === 'playing') {
+    bird.vy = flapPower;
+  } else if (gameState === 'start') {
+    tryStartGame();
+  }
+}
+
+canvas.addEventListener('pointerdown', flap);
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'ArrowUp') {
+    e.preventDefault();
+    if (gameState === 'gameover') return;
+    flap();
+  }
+});
+
+function pointInCanvas(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  return clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+}
+
+canvas.addEventListener('click', (e) => {
+  if (gameState === 'gameover') {
+    if (pointInCanvas(e.clientX, e.clientY)) {
+      // 故意不直接重新开始，必须点到跑路按钮
+    }
+  }
+});
+
+function updatePlaying() {
+  bird.vy += gravity;
+  bird.y += bird.vy;
+  bird.rot = Math.max(-0.5, Math.min(1.2, bird.vy * 0.08));
+
+  for (let i = 0; i < pipes.length; i++) {
+    const p = pipes[i];
+    p.x -= pipeSpeed;
+
+    if (!p.passed && p.x + pipeWidth < bird.x) {
+      p.passed = true;
+      score++;
+      if (score > bestScore) {
+        bestScore = score;
+        localStorage.setItem('weirdFlappyBest', bestScore);
+      }
+    }
+
+    const inX = bird.x + bird.r > p.x && bird.x - bird.r < p.x + pipeWidth;
+    const hitTop = bird.y - bird.r < p.topH;
+    const hitBottom = bird.y + bird.r > p.topH + pipeGap;
+    if (inX && (hitTop || hitBottom)) {
+      triggerGameOver();
+    }
+  }
+
+  if (pipes.length && pipes[0].x + pipeWidth < -20) {
+    pipes.shift();
+    const lastX = pipes[pipes.length - 1].x;
+    spawnPipe(lastX + 180);
+  }
+
+  if (bird.y + bird.r > canvas.height - groundH) {
+    bird.y = canvas.height - groundH - bird.r;
+    triggerGameOver();
+  }
+  if (bird.y - bird.r < 0) {
+    bird.y = bird.r;
+    bird.vy *= 0.6;
+  }
+}
+
+function triggerGameOver() {
+  if (gameState !== 'playing') return;
+  gameState = 'gameover';
+  showRetryButton();
+}
+
+function showRetryButton() {
+  retryBtn.style.display = 'block';
+  retryBtn.textContent = ['再次挑战', '不服再来', '再死一次', '重开！'][Math.floor(Math.random()*4)];
+  positionRetryButton(canvas.width / 2, canvas.height * 0.72);
+}
+
+function positionRetryButton(px, py) {
+  const rect = wrap.getBoundingClientRect();
+  const cRect = canvas.getBoundingClientRect();
+  const bw = retryBtn.offsetWidth || 140;
+  const bh = retryBtn.offsetHeight || 56;
+
+  let x = cRect.left - rect.left + px - bw / 2;
+  let y = cRect.top - rect.top + py - bh / 2;
+
+  x = Math.max(cRect.left - rect.left, Math.min(x, cRect.right - rect.left - bw));
+  y = Math.max(cRect.top - rect.top, Math.min(y, cRect.bottom - rect.top - bh));
+
+  retryBtn.style.left = (x + bw / 2) + 'px';
+  retryBtn.style.top = (y + bh / 2) + 'px';
+}
+
+retryBtn.addEventListener('mouseenter', evadeButton);
+retryBtn.addEventListener('mousemove', evadeButton);
+
+wrap.addEventListener('mousemove', (e) => {
+  if (gameState !== 'gameover' || retryBtn.style.display !== 'block') return;
+  const btnRect = retryBtn.getBoundingClientRect();
+  const dx = e.clientX - (btnRect.left + btnRect.width / 2);
+  const dy = e.clientY - (btnRect.top + btnRect.height / 2);
+  const dist = Math.hypot(dx, dy);
+  if (dist < 110) evadeButton(e);
+});
+
+function evadeButton(e) {
+  if (gameState !== 'gameover') return;
+
+  const rect = wrap.getBoundingClientRect();
+  const cRect = canvas.getBoundingClientRect();
+  const btnRect = retryBtn.getBoundingClientRect();
+
+  const mx = e.clientX;
+  const my = e.clientY;
+  const bx = btnRect.left + btnRect.width / 2;
+  const by = btnRect.top + btnRect.height / 2;
+
+  let vx = bx - mx;
+  let vy = by - my;
+  let len = Math.hypot(vx, vy) || 1;
+  vx /= len;
+  vy /= len;
+
+  const move = 70 + Math.random() * 35;
+  let nx = (bx - rect.left) + vx * move;
+  let ny = (by - rect.top) + vy * move;
+
+  const margin = 4;
+  const minX = cRect.left - rect.left + btnRect.width / 2 + margin;
+  const maxX = cRect.right - rect.left - btnRect.width / 2 - margin;
+  const minY = cRect.top - rect.top + btnRect.height / 2 + margin;
+  const maxY = cRect.bottom - rect.top - btnRect.height / 2 - margin;
+
+  nx = Math.max(minX, Math.min(maxX, nx));
+  ny = Math.max(minY, Math.min(maxY, ny));
+
+  retryBtn.style.left = nx + 'px';
+  retryBtn.style.top = ny + 'px';
+}
+
+retryBtn.addEventListener('click', () => {
+  if (gameState === 'gameover') {
+    resetGame();
+  }
+});
+
+function drawBackground() {
+  const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+  g.addColorStop(0, '#8ed6ff');
+  g.addColorStop(1, '#dff7ff');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // stars/sparkles for silly vibe
+  for (const s of stars) {
+    ctx.globalAlpha = 0.45 + Math.sin(performance.now() * 0.003 * s.s + s.x) * 0.25;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // clouds
+  drawCloud(60, 110, 0.9);
+  drawCloud(250, 150, 1.2);
+  drawCloud(180, 70, 0.7);
+
+  // hills
+  ctx.fillStyle = '#78c850';
+  ctx.beginPath();
+  ctx.arc(60, canvas.height - groundH + 30, 80, Math.PI, Math.PI * 2);
+  ctx.arc(170, canvas.height - groundH + 25, 95, Math.PI, Math.PI * 2);
+  ctx.arc(315, canvas.height - groundH + 40, 85, Math.PI, Math.PI * 2);
+  ctx.fill();
+
+  // ground
+  ctx.fillStyle = '#d9b35b';
+  ctx.fillRect(0, canvas.height - groundH, canvas.width, groundH);
+  ctx.fillStyle = '#b08a3c';
+  for (let i = 0; i < canvas.width; i += 24) {
+    ctx.fillRect(i, canvas.height - groundH, 12, 8);
+  }
+  ctx.fillStyle = '#8bc34a';
+  ctx.fillRect(0, canvas.height - groundH, canvas.width, 12);
+}
+
+function drawCloud(x, y, s) {
+  ctx.fillStyle = 'rgba(255,255,255,0.82)';
+  ctx.beginPath();
+  ctx.arc(x, y, 18*s, Math.PI*0.5, Math.PI*1.5);
+  ctx.arc(x+22*s, y-10*s, 22*s, Math.PI, Math.PI*2);
+  ctx.arc(x+48*s, y, 18*s, Math.PI*1.5, Math.PI*0.5);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawPipes() {
+  for (const p of pipes) {
+    const x = p.x;
+    const topH = p.topH;
+    const bottomY = topH + pipeGap;
+
+    drawPipe(x, 0, pipeWidth, topH, true);
+    drawPipe(x, bottomY, pipeWidth, canvas.height - groundH - bottomY, false);
+  }
+}
+
+function drawPipe(x, y, w, h, top) {
+  const grad = ctx.createLinearGradient(x, 0, x + w, 0);
+  grad.addColorStop(0, '#1f9d39');
+  grad.addColorStop(0.5, '#41d95d');
+  grad.addColorStop(1, '#158530');
+  ctx.fillStyle = grad;
+  ctx.fillRect(x, y, w, h);
+
+  ctx.fillStyle = '#72f28b';
+  ctx.fillRect(x + 4, y + 4, 10, h - 8);
+
+  ctx.fillStyle = '#168230';
+  if (top) {
+    ctx.fillRect(x - 4, h - 22, w + 8, 22);
+    ctx.fillStyle = '#5ef17f';
+    ctx.fillRect(x, h - 18, w, 6);
+  } else {
+    ctx.fillRect(x - 4, y, w + 8, 22);
+    ctx.fillStyle = '#5ef17f';
+    ctx.fillRect(x, y + 4, w, 6);
+  }
+}
+
+function drawBird() {
+  ctx.save();
+  ctx.translate(bird.x, bird.y);
+  ctx.rotate(bird.rot);
+
+  // body
+  ctx.fillStyle = '#ffd93b';
+  ctx.beginPath();
+  ctx.arc(0, 0, bird.r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // wing
+  ctx.fillStyle = '#f5a623';
+  ctx.beginPath();
+  ctx.ellipse(-4, 5, 9, 6 + Math.abs(bird.vy) * 0.18, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // eye
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(6, -4, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(8, -4, 2.3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // beak
+  ctx.fillStyle = '#ff7a00';
+  ctx.beginPath();
+  ctx.moveTo(12, 2);
+  ctx.lineTo(23, 0);
+  ctx.lineTo(12, -4);
+  ctx.closePath();
+  ctx.fill();
+
+  // meme blush
+  ctx.fillStyle = 'rgba(255,80,120,.55)';
+  ctx.beginPath();
+  ctx.arc(2, 6, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function drawScore() {
+  ctx.fillStyle = 'rgba(0,0,0,.25)';
+  ctx.font = 'bold 42px Arial';
+  ctx.textAlign = 'center';
+  ctx.fillText(score, canvas.width / 2 + 2, 72);
+  ctx.fillStyle = '#fff';
+  ctx.fillText(score, canvas.width / 2, 70);
+}
+
+function drawStartScreen() {
+  drawBackground();
+  drawBirdIdle();
+  titleText();
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(255,255,255,.95)';
+  roundRect(28, 400, 304, 108, 20, 'rgba(0,0,0,.28)');
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 28px Microsoft YaHei';
+  ctx.fillText('点我开始游戏', canvas.width / 2, 444);
+  ctx.font = '18px Microsoft YaHei';
+  ctx.fillStyle = '#333';
+  ctx.fillText('友情提示：不一定点得进去', canvas.width / 2, 478);
+  ctx.font = '16px Microsoft YaHei';
+  ctx.fillStyle = '#ff2d55';
+  ctx.fillText('已尝试次数：' + startClickCount, canvas.width / 2, 510);
+}
+
+function drawBirdIdle() {
+  const t = performance.now() * 0.004;
+  const y = 260 + Math.sin(t) * 10;
+  ctx.save();
+  ctx.translate(canvas.width / 2 - 8, y);
+  ctx.rotate(Math.sin(t) * 0.08);
+
+  ctx.fillStyle = '#ffd93b';
+  ctx.beginPath();
+  ctx.arc(0, 0, 24, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#f5a623';
+  ctx.beginPath();
+  ctx.ellipse(-8, 8, 12, 8, -0.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(8, -6, 7, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#111';
+  ctx.beginPath();
+  ctx.arc(10, -5, 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#ff7a00';
+  ctx.beginPath();
+  ctx.moveTo(18, 2);
+  ctx.lineTo(32, -2);
+  ctx.lineTo(18, -8);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
+}
+
+function titleText() {
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 36px Microsoft YaHei';
+  ctx.fillStyle = '#000';
+  ctx.fillText('魔性飞鸟', canvas.width / 2 + 2, 116);
+  ctx.fillStyle = '#ffe600';
+  ctx.fillText('魔性飞鸟', canvas.width / 2, 112);
+
+  ctx.font = 'bold 18px Microsoft YaHei';
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('这不是你想开始就能开始的', canvas.width / 2, 146);
+}
+
+function drawGameOverScreen() {
+  ctx.fillStyle = 'rgba(0,0,0,0.42)';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  roundRect(32, 150, 296, 220, 20, 'rgba(255,255,255,0.95)');
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#111';
+  ctx.font = 'bold 34px Microsoft YaHei';
+  ctx.fillText('你坠机了', canvas.width / 2, 205);
+
+  ctx.font = '22px Microsoft YaHei';
+  ctx.fillStyle = '#444';
+  ctx.fillText('本局得分：' + score, canvas.width / 2, 255);
+  ctx.fillText('最高纪录：' + bestScore, canvas.width / 2, 292);
+
+  ctx.font = '18px Microsoft YaHei';
+  ctx.fillStyle = '#ff2d55';
+  const taunts = [
+    '就这？再来一次啊',
+    '鸟说：我尽力了',
+    '你和柱子是真爱',
+    '差一点，就差很多',
+    '失败乃正常操作'
+  ];
+  ctx.fillText(taunts[score % taunts.length], canvas.width / 2, 338);
+
+  ctx.font = '16px Microsoft YaHei';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('请追到下面那个按钮，再点击它', canvas.width / 2, 590);
+}
+
+function roundRect(x, y, w, h, r, fill) {
+  ctx.fillStyle = fill;
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawPrankOverlay() {
+  if (cracks.length) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,.85)';
+    ctx.lineWidth = 2;
+    for (const c of cracks) {
+      ctx.beginPath();
+      ctx.moveTo(c.sx, c.sy);
+      for (const s of c.segs) ctx.lineTo(s.x, s.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+function drawTransition() {
+  drawBackground();
+  titleText();
+  for (const p of confetti) {
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x, p.y, p.size, p.size * 0.6);
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.12;
+    p.life--;
+  }
+  confetti = confetti.filter(p => p.life > 0);
+}
+
+function update(dt) {
+  if (gameState === 'playing') updatePlaying();
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  if (gameState === 'start' || gameState === 'prank') {
+    drawStartScreen();
+    drawPrankOverlay();
+  } else if (gameState === 'playing') {
+    drawBackground();
+    drawPipes();
+    drawBird();
+    drawScore();
+  } else if (gameState === 'gameover') {
+    drawBackground();
+    drawPipes();
+    drawBird();
+    drawScore();
+    drawGameOverScreen();
+  } else if (gameState === 'transitioning') {
+    drawTransition();
+  }
+}
+
+function loop(ts) {
+  const dt = ts - lastTime;
+  lastTime = ts;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

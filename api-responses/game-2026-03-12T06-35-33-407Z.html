@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>修复版贪吃蛇 - Canvas 360x640</title>
+<style>
+  html,body{height:100%;margin:0;background:#111;font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;}
+  .wrap{max-width:420px;margin:12px auto;text-align:center;color:#fff;}
+  canvas{ background:#0b2a1f; display:block; margin:0 auto; max-width: 100%; height: auto; }
+  .hud{color:#ddd;margin-top:8px;}
+  .controls{margin-top:6px;font-size:13px;color:#bbb;}
+  .small{font-size:12px;color:#99a;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="game"></canvas>
+  <div class="hud">
+    <span id="score">分数: 0</span> &nbsp;|&nbsp; 高分:
+    <span id="hi">0</span>
+  </div>
+  <div class="controls">
+    箭头 / WASD 控制方向，触屏滑动也可。点击画布开始/重玩或暂停。
+    <div class="small">吃到果子长度+1���死亡后点击重玩，复活不会卡死。</div>
+  </div>
+</div>
+
+<script>
+/*
+  单文件 Canvas 游戏
+  Canvas 必须在 JS 中设置尺寸（360x640）
+  使用 requestAnimationFrame + 固定步长更新
+  修复关键点：
+   - 使用单一循环（单个 requestAnimationFrame），重置 timing 状态以避免复活时卡死
+   - 随机产生果子，确保不出现在蛇身上
+   - 吃到果子长度 +1
+*/
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// 强制设置画布尺寸（要求）
+canvas.width = 360;
+canvas.height = 640;
+
+// CSS 要求已在 <style> 中设置：canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+
+// 游戏参数（格子）
+const CELL = 20; // 每格像素
+const COLS = Math.floor(canvas.width / CELL); // 18
+const ROWS = Math.floor(canvas.height / CELL); // 32
+
+// DOM
+const scoreEl = document.getElementById('score');
+const hiEl = document.getElementById('hi');
+
+// 状态
+let state = 'menu'; // 'menu' | 'playing' | 'paused' | 'dead'
+let score = 0;
+let hiScore = parseInt(localStorage.getItem('snake_hi') || '0', 10);
+
+// 画面节奏
+let speed = 8; // 格/秒
+let moveInterval = 1000 / speed;
+let accumulator = 0;
+let lastTime = 0;
+let rafId = null;
+
+// Snake
+let snake = [];
+let dir = {x: 1, y: 0}; // 默认向右
+let nextDir = {x: 1, y: 0};
+let grow = 0;
+
+// Fruit
+let fruit = null;
+
+// 控制限制（不��瞬间反向）
+function setDirection(nx, ny) {
+  // 防止反向（新方向与当前方向相反时忽略）
+  if (nx === -dir.x && ny === -dir.y) return;
+  nextDir = {x: nx, y: ny};
+}
+
+// Helper: 随机整数 [0, n)
+function randInt(n) { return Math.floor(Math.random()*n); }
+
+// 初始化/重置
+function resetGame() {
+  // reset core variables
+  snake = [];
+  // 初始蛇长度 4
+  const startX = Math.floor(COLS/2);
+  const startY = Math.floor(ROWS/2);
+  for (let i=0;i<4;i++){
+    snake.push({x: startX - i, y: startY});
+  }
+  dir = {x: 1, y: 0};
+  nextDir = {x: 1, y: 0};
+  grow = 0;
+  score = 0;
+  speed = 8;
+  moveInterval = 1000 / speed;
+  spawnFruit();
+  updateHUD();
+}
+
+// 生成果子，确保不在蛇身上
+function spawnFruit() {
+  if (!Array.isArray(snake) || snake.length === 0) {
+    // safety: populate in center if snake missing
+    fruit = {x: randInt(COLS), y: randInt(ROWS)};
+    return;
+  }
+  let tries = 0;
+  while (true) {
+    const fx = randInt(COLS);
+    const fy = randInt(ROWS);
+    const collide = snake.some(s => s.x === fx && s.y === fy);
+    if (!collide) {
+      fruit = {x: fx, y: fy};
+      return;
+    }
+    tries++;
+    // safety escape (but very unlikely)
+    if (tries > 1000) {
+      // choose first free cell by scanning
+      for (let y=0;y<ROWS;y++){
+        for (let x=0;x<COLS;x++){
+          if (!snake.some(s => s.x===x && s.y===y)) {
+            fruit = {x,y};
+            return;
+          }
+        }
+      }
+      // fallback
+      fruit = {x: 0, y: 0};
+      return;
+    }
+  }
+}
+
+// 更新 HUD
+function updateHUD() {
+  scoreEl.textContent = '分数: ' + score;
+  hiEl.textContent = hiScore;
+}
+
+// 游戏更新（以格为单位）
+function update() {
+  if (state !== 'playing') return;
+
+  // 应用方向（nextDir 在 setDirection 中已经处理反向）
+  dir = nextDir;
+
+  // 新头
+  let head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
+
+  // 碰墙检测（墙为死亡）
+  if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
+    die();
+    return;
+  }
+
+  // 碰到自己
+  for (let i=0;i<snake.length;i++){
+    if (snake[i].x === head.x && snake[i].y === head.y) {
+      die();
+      return;
+    }
+  }
+
+  // 推入头
+  snake.unshift(head);
+
+  // 吃到果子？
+  if (fruit && head.x === fruit.x && head.y === fruit.y) {
+    // 增长1
+    grow += 1;
+    score += 1;
+    // 提升速度每吃 5 个加速 1
+    if (score % 5 === 0) {
+      speed = Math.min(20, speed + 1);
+      moveInterval = 1000 / speed;
+    }
+    // 更新高分
+    if (score > hiScore) {
+      hiScore = score;
+      localStorage.setItem('snake_hi', String(hiScore));
+    }
+    spawnFruit();
+    updateHUD();
+  }
+
+  // 如果没有增长，则去掉尾部以维持长度
+  if (grow > 0) {
+    grow--;
+    // keep tail (effectively grows by 1)
+  } else {
+    snake.pop();
+  }
+}
+
+// 死亡处理
+function die() {
+  state = 'dead';
+  // Render will show overlay. 不停止主循环以避免复活时卡死。
+}
+
+// 渲染
+function draw() {
+  // 背景
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  // 背景格纹 subtle
+  ctx.fillStyle = '#063b2f';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Grid lines (subtle)
+  ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= COLS; x++) {
+    const px = x * CELL;
+    ctx.beginPath();
+    ctx.moveTo(px, 0);
+    ctx.lineTo(px, canvas.height);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= ROWS; y++) {
+    const py = y * CELL;
+    ctx.beginPath();
+    ctx.moveTo(0, py);
+    ctx.lineTo(canvas.width, py);
+    ctx.stroke();
+  }
+
+  // Draw fruit
+  if (fruit) {
+    const fx = fruit.x * CELL;
+    const fy = fruit.y * CELL;
+    // nice fruit drawing: circle with shine
+    ctx.beginPath();
+    ctx.fillStyle = '#ff4d4d';
+    ctx.strokeStyle = '#b32424';
+    ctx.lineWidth = 2;
+    ctx.ellipse(fx + CELL*0.5, fy + CELL*0.5, CELL*0.45, CELL*0.45, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.beginPath();
+    ctx.ellipse(fx + CELL*0.6, fy + CELL*0.35, CELL*0.12, CELL*0.12, 0, 0, Math.PI*2);
+    ctx.fill();
+  }
+
+  // Draw snake
+  for (let i=snake.length-1;i>=0;i--) {
+    const s = snake[i];
+    const px = s.x * CELL;
+    const py = s.y * CELL;
+    if (i === 0) {
+      // head
+      ctx.fillStyle = '#9aff8a';
+      ctx.strokeStyle = '#1b8717';
+      ctx.lineWidth = 2;
+      roundRect(ctx, px+1, py+1, CELL-2, CELL-2, 4, true, true);
+      // eye
+      ctx.fillStyle = '#063b2f';
+      const eyeOffsetX = dir.x === -1 ? 6 : (dir.x === 1 ? CELL-8 : CELL/2 - 3);
+      const eyeOffsetY = dir.y === -1 ? 6 : (dir.y === 1 ? CELL-8 : CELL/2 - 3);
+      ctx.beginPath();
+      ctx.ellipse(px + eyeOffsetX, py + eyeOffsetY, 2.5, 2.5, 0, 0, Math.PI*2);
+      ctx.fill();
+    } else {
+      // body
+      ctx.fillStyle = '#66d36f';
+      ctx.strokeStyle = '#1b8717';
+      ctx.lineWidth = 1;
+      roundRect(ctx, px+1, py+1, CELL-2, CELL-2, 3, true, true);
+    }
+  }
+
+  // Top bar shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.25)';
+  ctx.fillRect(0,0,canvas.width,36);
+
+  // Overlays for different states
+  if (state === 'menu') {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(20, 100, canvas.width-40, 200);
+    ctx.fillStyle = '#fff';
+    ctx.font = '22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('修复版贪吃蛇', canvas.width/2, 140);
+    ctx.font = '14px sans-serif';
+    ctx.fillStyle = '#cfe';
+    ctx.fillText('点击画布开始', canvas.width/2, 170);
+    ctx.fillStyle = '#99d';
+    ctx.fillText('吃果子 +1 长度，躲墙和自己', canvas.width/2, 200);
+    ctx.fillStyle = '#aef';
+    ctx.fillText('触屏滑动或使用方向键控制', canvas.width/2, 230);
+  } else if (state === 'paused') {
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(40, 200, canvas.width-80, 120);
+    ctx.fillStyle = '#fff';
+    ctx.font = '20px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('已暂停', canvas.width/2, 260);
+    ctx.font = '14px sans-serif';
+    ctx.fillStyle = '#cfe';
+    ctx.fillText('点击画布恢复游戏', canvas.width/2, 290);
+  } else if (state === 'dead') {
+    // show big overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(20, 160, canvas.width-40, 220);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffbaba';
+    ctx.font = '26px sans-serif';
+    ctx.fillText('游戏结束', canvas.width/2, 210);
+    ctx.fillStyle = '#fff';
+    ctx.font = '18px sans-serif';
+    ctx.fillText('得分: ' + score, canvas.width/2, 245);
+    ctx.fillStyle = '#cfe';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('点击画布重玩', canvas.width/2, 285);
+    ctx.fillText('或使用键盘 ←→↑↓ / WASD 控制', canvas.width/2, 310);
+  }
+}
+
+// helper: rounded rectangle
+function roundRect(ctx, x, y, w, h, r, fill, stroke) {
+  if (typeof r === 'undefined') r = 5;
+  if (typeof r === 'number') r = {tl: r, tr: r, br: r, bl: r};
+  ctx.beginPath();
+  ctx.moveTo(x + r.tl, y);
+  ctx.lineTo(x + w - r.tr, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+  ctx.lineTo(x + w, y + h - r.br);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+  ctx.lineTo(x + r.bl, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+  ctx.lineTo(x, y + r.tl);
+  ctx.quadraticCurveTo(x, y, x + r.tl, y);
+  ctx.closePath();
+  if (fill) ctx.fill();
+  if (stroke) ctx.stroke();
+}
+
+// 主循环（单一 rAF）
+function loop(timestamp) {
+  if (!lastTime) lastTime = timestamp;
+  const dt = timestamp - lastTime;
+  lastTime = timestamp;
+
+  // Accumulate and perform fixed-step updates
+  accumulator += dt;
+  const maxCatchUp = 250; // 防止长时间切换导致 huge accumulator 卡顿
+  if (accumulator > maxCatchUp) accumulator = maxCatchUp;
+
+  while (accumulator >= moveInterval) {
+    update();
+    accumulator -= moveInterval;
+  }
+
+  draw();
+  rafId = requestAnimationFrame(loop);
+}
+
+// Input handling
+window.addEventListener('keydown', (e) => {
+  const k = e.key;
+  if (k === 'ArrowLeft' || k === 'a' || k === 'A') setDirection(-1,0);
+  else if (k === 'ArrowRight' || k === 'd' || k === 'D') setDirection(1,0);
+  else if (k === 'ArrowUp' || k === 'w' || k === 'W') setDirection(0,-1);
+  else if (k === 'ArrowDown' || k === 's' || k === 'S') setDirection(0,1);
+  else if (k === ' ' || k === 'Enter') {
+    if (state === 'menu' || state === 'dead') {
+      startPlaying();
+    } else if (state === 'playing') {
+      state = 'paused';
+    } else if (state === 'paused') {
+      resumePlaying();
+    }
+  } else if (k === 'r' || k === 'R') {
+    // quick restart
+    startPlaying();
+  }
+});
+
+// Touch controls (swipe detect)
+let touchStart = null;
+canvas.addEventListener('touchstart', (e) => {
+  const t = e.touches[0];
+  touchStart = {x: t.clientX, y: t.clientY, time: Date.now()};
+  // prevent ghost clicks
+  e.preventDefault();
+}, {passive:false});
+
+canvas.addEventListener('touchend', (e) => {
+  if (!touchStart) return;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStart.x;
+  const dy = t.clientY - touchStart.y;
+  const adx = Math.abs(dx);
+  const ady = Math.abs(dy);
+  const min = 10;
+  if (adx > ady && adx > min) {
+    if (dx > 0) setDirection(1,0);
+    else setDirection(-1,0);
+  } else if (ady > adx && ady > min) {
+    if (dy > 0) setDirection(0,1);
+    else setDirection(0,-1);
+  } else {
+    // tap
+    handleCanvasClick();
+  }
+  touchStart = null;
+}, {passive:false});
+
+// Mouse click/tap handling for start/pause/restart
+canvas.addEventListener('click', handleCanvasClick);
+function handleCanvasClick() {
+  if (state === 'menu') startPlaying();
+  else if (state === 'playing') {
+    state = 'paused';
+  } else if (state === 'paused') {
+    resumePlaying();
+  } else if (state === 'dead') {
+    startPlaying();
+  }
+}
+
+// Start playing: initialize and ensure timing safe
+function startPlaying() {
+  resetGame();
+  state = 'playing';
+  // Reset timing counters to avoid huge dt on resume/respawn
+  accumulator = 0;
+  lastTime = performance.now();
+  updateHUD();
+}
+
+// Resume from pause: keep game as is, but reset timing so no catch-up
+function resumePlaying() {
+  if (state !== 'paused') return;
+  state = 'playing';
+  accumulator = 0;
+  lastTime = performance.now();
+}
+
+// Ensure single RAF running
+if (!rafId) {
+  rafId = requestAnimationFrame(loop);
+}
+
+// 初始菜单渲染
+draw();
+updateHUD();
+
+</script>
+</body>
+</html>

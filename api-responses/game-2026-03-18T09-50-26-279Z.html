@@ -1,0 +1,623 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>穿墙迷宫</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            padding: 20px;
+        }
+        
+        .game-container {
+            position: relative;
+            width: 360px;
+            max-width: 100%;
+        }
+        
+        canvas {
+            width: 100%;
+            height: auto;
+            display: block;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            background: #0f0f23;
+        }
+        
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+        }
+        
+        .score-display {
+            text-align: center;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        .score-value {
+            color: #4fd1c5;
+            font-size: 32px;
+        }
+        
+        .high-score {
+            color: #ffd700;
+            font-size: 16px;
+            margin-top: 5px;
+        }
+        
+        .controls {
+            text-align: center;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        .menu-screen, .game-over-screen, .pause-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            pointer-events: auto;
+            border-radius: 12px;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .menu-screen.active, .game-over-screen.active, .pause-screen.active {
+            opacity: 1;
+        }
+        
+        .menu-title {
+            font-size: 36px;
+            margin-bottom: 20px;
+            color: #4fd1c5;
+            text-shadow: 0 0 10px rgba(79, 209, 197, 0.5);
+        }
+        
+        .menu-subtitle {
+            font-size: 18px;
+            margin-bottom: 30px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+        
+        .game-button {
+            background: linear-gradient(135deg, #4fd1c5 0%, #38b2ac 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            margin: 10px;
+            border-radius: 25px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(79, 209, 197, 0.3);
+            pointer-events: auto;
+        }
+        
+        .game-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(79, 209, 197, 0.4);
+        }
+        
+        .game-button:active {
+            transform: translateY(0);
+        }
+        
+        .instructions {
+            margin-top: 30px;
+            text-align: center;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        
+        .final-score {
+            font-size: 48px;
+            color: #4fd1c5;
+            margin: 20px 0;
+        }
+        
+        .game-over-title {
+            font-size: 32px;
+            color: #ff6b6b;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="360" height="640"></canvas>
+        
+        <div class="ui-overlay">
+            <div class="score-display">
+                <div>得分: <span class="score-value" id="score">0</span></div>
+                <div class="high-score">最高分: <span id="highScore">0</span></div>
+            </div>
+            <div class="controls">
+                方向键或WASD移动 | P暂停 | 穿墙逃脱敌人！
+            </div>
+        </div>
+        
+        <div class="menu-screen active" id="menuScreen">
+            <h1 class="menu-title">穿墙迷宫</h1>
+            <div class="menu-subtitle">收集能量球，躲避敌人！</div>
+            <button class="game-button" id="startButton">开始游戏</button>
+            <div class="instructions">
+                <p>🎮 方向键或WASD控制移动</p>
+                <p>🌀 穿过墙壁从另一边出现</p>
+                <p>⭐ 收集绿色能量球得分</p>
+                <p>💀 躲避红色敌人</p>
+                <p>⏸️ 按P键暂停游戏</p>
+            </div>
+        </div>
+        
+        <div class="game-over-screen" id="gameOverScreen">
+            <div class="game-over-title">游戏结束</div>
+            <div class="final-score" id="finalScore">0</div>
+            <button class="game-button" id="restartButton">重新开始</button>
+            <button class="game-button" id="menuButton">返回菜单</button>
+        </div>
+        
+        <div class="pause-screen" id="pauseScreen">
+            <div class="menu-title">游戏暂停</div>
+            <button class="game-button" id="resumeButton">继续游戏</button>
+            <button class="game-button" id="pauseMenuButton">返回菜单</button>
+        </div>
+    </div>
+
+    <script>
+        // 游戏常量
+        const CANVAS_WIDTH = 360;
+        const CANVAS_HEIGHT = 640;
+        const PLAYER_SIZE = 20;
+        const ENERGY_SIZE = 15;
+        const ENEMY_SIZE = 18;
+        const PLAYER_SPEED = 5;
+        const ENEMY_SPEED = 2;
+        const ENERGY_COUNT = 5;
+        const ENEMY_COUNT = 3;
+        
+        // 游戏状态
+        const GameState = {
+            MENU: 'menu',
+            PLAYING: 'playing',
+            PAUSED: 'paused',
+            GAME_OVER: 'gameover'
+        };
+        
+        // 游戏变量
+        let canvas, ctx;
+        let gameState = GameState.MENU;
+        let score = 0;
+        let highScore = 0;
+        let lastTime = 0;
+        
+        // 游戏对象
+        let player = {
+            x: CANVAS_WIDTH / 2,
+            y: CANVAS_HEIGHT / 2,
+            dx: 0,
+            dy: 0,
+            size: PLAYER_SIZE,
+            color: '#4fd1c5'
+        };
+        
+        let energies = [];
+        let enemies = [];
+        
+        // 输入状态
+        let keys = {
+            up: false,
+            down: false,
+            left: false,
+            right: false
+        };
+        
+        // 初始化游戏
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            
+            // 设置画布尺寸
+            canvas.width = CANVAS_WIDTH;
+            canvas.height = CANVAS_HEIGHT;
+            
+            // 加载最高分
+            highScore = parseInt(localStorage.getItem('wallPasserHighScore')) || 0;
+            document.getElementById('highScore').textContent = highScore;
+            
+            // 设置事件监听
+            setupEventListeners();
+            
+            // 开始游戏循环
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 设置事件监听
+        function setupEventListeners() {
+            // 键盘事件
+            document.addEventListener('keydown', (e) => {
+                handleInput(e.key, true);
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                handleInput(e.key, false);
+            });
+            
+            // 按钮事件
+            document.getElementById('startButton').addEventListener('click', startGame);
+            document.getElementById('restartButton').addEventListener('click', startGame);
+            document.getElementById('menuButton').addEventListener('click', showMenu);
+            document.getElementById('resumeButton').addEventListener('click', resumeGame);
+            document.getElementById('pauseMenuButton').addEventListener('click', showMenu);
+        }
+        
+        // 处理输入
+        function handleInput(key, pressed) {
+            switch(key.toLowerCase()) {
+                case 'arrowup':
+                case 'w':
+                    keys.up = pressed;
+                    break;
+                case 'arrowdown':
+                case 's':
+                    keys.down = pressed;
+                    break;
+                case 'arrowleft':
+                case 'a':
+                    keys.left = pressed;
+                    break;
+                case 'arrowright':
+                case 'd':
+                    keys.right = pressed;
+                    break;
+                case 'p':
+                    if (pressed && gameState === GameState.PLAYING) {
+                        pauseGame();
+                    } else if (pressed && gameState === GameState.PAUSED) {
+                        resumeGame();
+                    }
+                    break;
+                case ' ':
+                    if (pressed && gameState === GameState.MENU) {
+                        startGame();
+                    }
+                    break;
+            }
+        }
+        
+        // 开始游戏
+        function startGame() {
+            gameState = GameState.PLAYING;
+            score = 0;
+            document.getElementById('score').textContent = score;
+            
+            // 重置玩家位置
+            player.x = CANVAS_WIDTH / 2;
+            player.y = CANVAS_HEIGHT / 2;
+            player.dx = 0;
+            player.dy = 0;
+            
+            // 生成能量球
+            energies = [];
+            for (let i = 0; i < ENERGY_COUNT; i++) {
+                spawnEnergy();
+            }
+            
+            // 生成敌人
+            enemies = [];
+            for (let i = 0; i < ENEMY_COUNT; i++) {
+                spawnEnemy();
+            }
+            
+            // 隐藏菜单，显示游戏
+            document.getElementById('menuScreen').classList.remove('active');
+            document.getElementById('gameOverScreen').classList.remove('active');
+            document.getElementById('pauseScreen').classList.remove('active');
+        }
+        
+        // 暂停游戏
+        function pauseGame() {
+            gameState = GameState.PAUSED;
+            document.getElementById('pauseScreen').classList.add('active');
+        }
+        
+        // 恢复游戏
+        function resumeGame() {
+            gameState = GameState.PLAYING;
+            document.getElementById('pauseScreen').classList.remove('active');
+        }
+        
+        // 显示菜单
+        function showMenu() {
+            gameState = GameState.MENU;
+            document.getElementById('menuScreen').classList.add('active');
+            document.getElementById('gameOverScreen').classList.remove('active');
+            document.getElementById('pauseScreen').classList.remove('active');
+        }
+        
+        // 游戏结束
+        function gameOver() {
+            gameState = GameState.GAME_OVER;
+            
+            // 更新最高分
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('wallPasserHighScore', highScore);
+                document.getElementById('highScore').textContent = highScore;
+            }
+            
+            document.getElementById('finalScore').textContent = score;
+            document.getElementById('gameOverScreen').classList.add('active');
+        }
+        
+        // 生成能量球
+        function spawnEnergy() {
+            energies.push({
+                x: Math.random() * (CANVAS_WIDTH - ENERGY_SIZE * 2) + ENERGY_SIZE,
+                y: Math.random() * (CANVAS_HEIGHT - ENERGY_SIZE * 2) + ENERGY_SIZE,
+                size: ENERGY_SIZE,
+                color: '#4ade80',
+                pulse: 0
+            });
+        }
+        
+        // 生成敌人
+        function spawnEnemy() {
+            let x, y;
+            
+            // 确保敌人不会在玩家附近生成
+            do {
+                x = Math.random() * (CANVAS_WIDTH - ENEMY_SIZE * 2) + ENEMY_SIZE;
+                y = Math.random() * (CANVAS_HEIGHT - ENEMY_SIZE * 2) + ENEMY_SIZE;
+            } while (Math.abs(x - player.x) < 100 && Math.abs(y - player.y) < 100);
+            
+            enemies.push({
+                x: x,
+                y: y,
+                dx: (Math.random() > 0.5 ? 1 : -1) * ENEMY_SPEED,
+                dy: (Math.random() > 0.5 ? 1 : -1) * ENEMY_SPEED,
+                size: ENEMY_SIZE,
+                color: '#ff6b6b'
+            });
+        }
+        
+        // 更新游戏逻辑
+        function update(deltaTime) {
+            if (gameState !== GameState.PLAYING) return;
+            
+            // 更新玩家速度
+            player.dx = 0;
+            player.dy = 0;
+            
+            if (keys.up) player.dy = -PLAYER_SPEED;
+            if (keys.down) player.dy = PLAYER_SPEED;
+            if (keys.left) player.dx = -PLAYER_SPEED;
+            if (keys.right) player.dx = PLAYER_SPEED;
+            
+            // 更新玩家位置（穿墙逻辑）
+            player.x += player.dx;
+            player.y += player.dy;
+            
+            // 穿墙处理
+            if (player.x < -player.size) player.x = CANVAS_WIDTH + player.size;
+            if (player.x > CANVAS_WIDTH + player.size) player.x = -player.size;
+            if (player.y < -player.size) player.y = CANVAS_HEIGHT + player.size;
+            if (player.y > CANVAS_HEIGHT + player.size) player.y = -player.size;
+            
+            // 更新能量球脉冲效果
+            energies.forEach(energy => {
+                energy.pulse = (energy.pulse + 0.05) % (Math.PI * 2);
+            });
+            
+            // 更新敌人位置（穿墙逻辑）
+            enemies.forEach(enemy => {
+                enemy.x += enemy.dx;
+                enemy.y += enemy.dy;
+                
+                // 穿墙处理
+                if (enemy.x < -enemy.size) enemy.x = CANVAS_WIDTH + enemy.size;
+                if (enemy.x > CANVAS_WIDTH + enemy.size) enemy.x = -enemy.size;
+                if (enemy.y < -enemy.size) enemy.y = CANVAS_HEIGHT + enemy.size;
+                if (enemy.y > CANVAS_HEIGHT + enemy.size) enemy.y = -enemy.size;
+            });
+            
+            // 检测玩家与能量球的碰撞
+            for (let i = energies.length - 1; i >= 0; i--) {
+                const energy = energies[i];
+                const distance = Math.sqrt(
+                    Math.pow(player.x - energy.x, 2) + 
+                    Math.pow(player.y - energy.y, 2)
+                );
+                
+                if (distance < player.size + energy.size) {
+                    // 收集能量球
+                    score += 10;
+                    document.getElementById('score').textContent = score;
+                    
+                    // 移除能量球并生成新的
+                    energies.splice(i, 1);
+                    spawnEnergy();
+                }
+            }
+            
+            // 检测玩家与敌人的碰撞
+            for (let i = 0; i < enemies.length; i++) {
+                const enemy = enemies[i];
+                const distance = Math.sqrt(
+                    Math.pow(player.x - enemy.x, 2) + 
+                    Math.pow(player.y - enemy.y, 2)
+                );
+                
+                if (distance < player.size + enemy.size) {
+                    gameOver();
+                    return;
+                }
+            }
+        }
+        
+        // 渲染游戏
+        function render() {
+            // 清空画布
+            ctx.fillStyle = '#0f0f23';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // 绘制网格背景
+            ctx.strokeStyle = 'rgba(79, 209, 197, 0.1)';
+            ctx.lineWidth = 1;
+            
+            for (let x = 0; x <= CANVAS_WIDTH; x += 40) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, CANVAS_HEIGHT);
+                ctx.stroke();
+            }
+            
+            for (let y = 0; y <= CANVAS_HEIGHT; y += 40) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(CANVAS_WIDTH, y);
+                ctx.stroke();
+            }
+            
+            // 绘制能量球
+            energies.forEach(energy => {
+                const pulseSize = energy.size + Math.sin(energy.pulse) * 3;
+                
+                // 绘制光晕
+                ctx.beginPath();
+                ctx.arc(energy.x, energy.y, pulseSize + 5, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(74, 222, 128, 0.2)';
+                ctx.fill();
+                
+                // 绘制能量球
+                ctx.beginPath();
+                ctx.arc(energy.x, energy.y, pulseSize, 0, Math.PI * 2);
+                ctx.fillStyle = energy.color;
+                ctx.fill();
+                
+                // 绘制高光
+                ctx.beginPath();
+                ctx.arc(energy.x - pulseSize/3, energy.y - pulseSize/3, pulseSize/4, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.fill();
+            });
+            
+            // 绘制敌人
+            enemies.forEach(enemy => {
+                // 绘制敌人主体
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.size, 0, Math.PI * 2);
+                ctx.fillStyle = enemy.color;
+                ctx.fill();
+                
+                // 绘制敌人眼睛
+                ctx.fillStyle = 'white';
+                ctx.beginPath();
+                ctx.arc(enemy.x - enemy.size/3, enemy.y - enemy.size/4, enemy.size/4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(enemy.x + enemy.size/3, enemy.y - enemy.size/4, enemy.size/4, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // 绘制敌人瞳孔
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(enemy.x - enemy.size/3, enemy.y - enemy.size/4, enemy.size/8, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.beginPath();
+                ctx.arc(enemy.x + enemy.size/3, enemy.y - enemy.size/4, enemy.size/8, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            
+            // 绘制玩家
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.size, 0, Math.PI * 2);
+            ctx.fillStyle = player.color;
+            ctx.fill();
+            
+            // 绘制玩家高光
+            ctx.beginPath();
+            ctx.arc(player.x - player.size/3, player.y - player.size/3, player.size/3, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            ctx.fill();
+            
+            // 绘制玩家眼睛
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(player.x - player.size/3, player.y - player.size/6, player.size/4, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(player.x + player.size/3, player.y - player.size/6, player.size/4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 绘制玩家瞳孔
+            ctx.fillStyle = '#1a1a2e';
+            ctx.beginPath();
+            ctx.arc(player.x - player.size/3, player.y - player.size/6, player.size/8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(player.x + player.size/3, player.y - player.size/6, player.size/8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // 绘制穿墙效果（当玩家靠近边界时）
+            if (player.x < player.size || player.x > CANVAS_WIDTH - player.size ||
+                player.y < player.size || player.y > CANVAS_HEIGHT - player.size) {
+                
+                ctx.strokeStyle = 'rgba(79, 209, 197, 0.5)';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.size + 5, 0, Math.PI * 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        }
+        
+        // 游戏循环
+        function gameLoop(currentTime) {
+            const deltaTime = currentTime - lastTime;
+            lastTime = currentTime;
+            
+            update(deltaTime);
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // 当页面加载完成后初始化游戏
+        window.onload = init;
+    </script>
+</body>
+</html>

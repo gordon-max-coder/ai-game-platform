@@ -1,0 +1,666 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>宝石争夺战（含AI对手）</title>
+<style>
+  html,body { height:100%; margin:0; background:#111; color:#fff; font-family: Arial, Helvetica, sans-serif; -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
+  .wrap { width:360px; margin:20px auto 40px; }
+  canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; background: linear-gradient(#072033, #001219); border-radius:12px; box-shadow:0 6px 20px rgba(0,0,0,0.7), inset 0 3px 8px rgba(255,255,255,0.02); }
+  .footer { text-align:center; color:#aab; font-size:12px; margin-top:8px; }
+  button.ctrl { display:block; margin:10px auto; padding:8px 14px; border-radius:6px; border:none; background:#05a; color:#fff; font-weight:700; cursor:pointer; }
+  button.ctrl:hover { background:#07c; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="game"></canvas>
+  <div style="text-align:center; margin-top:8px;">
+    <button id="startBtn" class="ctrl">开始游戏</button>
+    <button id="muteBtn" class="ctrl" style="background:#444;">静音</button>
+  </div>
+  <div class="footer">移动：鼠标/触摸；或 ← → 键</div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  // Required explicit size in JS:
+  canvas.width = 360;
+  canvas.height = 640;
+  const ctx = canvas.getContext('2d');
+
+  const W = canvas.width, H = canvas.height;
+
+  // Game states
+  let running = false;
+  let started = false;
+  let lastTime = 0;
+  let spawnTimer = 0;
+  let spawnInterval = 800; // ms
+  let difficultyTimer = 0;
+  let totalTime = 60; // seconds game length
+  let timeLeft = totalTime;
+  let score = 0;
+  let aiScore = 0;
+
+  // Audio
+  let audioEnabled = true;
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch(e) {
+        audioEnabled = false;
+      }
+    }
+  }
+  function beep(freq=440, time=0.06, type='sine', vol=0.12) {
+    if(!audioEnabled) return;
+    ensureAudio();
+    if(!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.value = vol;
+    o.connect(g); g.connect(audioCtx.destination);
+    o.start();
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + time);
+    o.stop(audioCtx.currentTime + time + 0.02);
+  }
+
+  // Player
+  const player = {
+    x: W/2,
+    y: H - 70,
+    w: 72,
+    h: 36,
+    color: '#38f',
+    vx: 0,
+    maxSpeed: 800 // px/s when using keyboard; pointer is instantaneous follow
+  };
+
+  // AI opponent
+  const ai = {
+    x: W/2,
+    y: H - 130,
+    w: 70,
+    h: 32,
+    color: '#f35',
+    maxSpeed: 230, // px/s
+    mistakeChance: 0.12, // base chance to make mistake
+    focus: null, // target item id
+    reactionLag: 120 // ms delay before reacting
+  };
+
+  // Items
+  let items = [];
+  let itemIdCounter = 1;
+
+  function spawnItem() {
+    // Types: gem (10), star (30), bomb (-15)
+    const r = Math.random();
+    let type = 'gem';
+    if (r > 0.92) type = 'star';      // ~8%
+    else if (r < 0.12) type = 'bomb'; // ~12%
+    const x = 18 + Math.random() * (W - 36);
+    const speed = 60 + Math.random() * (140 + Math.min(200, (totalTime - timeLeft) * 5)); // accelerate with time left decreasing
+    const size = type === 'star' ? 18 : (type === 'bomb' ? 16 : 14);
+    const value = type === 'gem' ? 10 : (type === 'star' ? 30 : -15);
+    const col = type === 'gem' ? '#00ffd5' : (type === 'star' ? '#ffd700' : '#222');
+    const id = itemIdCounter++;
+    items.push({id, type, x, y: -size-10, vy: speed, size, value, col, caught: false});
+  }
+
+  // Input handling
+  let pointerActive = false;
+  let pointerX = player.x;
+  let keyLeft = false, keyRight = false;
+  let lastPointerTime = 0;
+
+  canvas.addEventListener('mousedown', (e) => {
+    pointerActive = true;
+    const rect = canvas.getBoundingClientRect();
+    pointerX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    lastPointerTime = performance.now();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (!started) startGame();
+  });
+  window.addEventListener('mousemove', (e) => {
+    if (!pointerActive) return;
+    const rect = canvas.getBoundingClientRect();
+    pointerX = (e.clientX - rect.left) * (canvas.width / rect.width);
+    lastPointerTime = performance.now();
+  });
+  window.addEventListener('mouseup', ()=> pointerActive = false);
+  canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    pointerActive = true;
+    const t = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    pointerX = (t.clientX - rect.left) * (canvas.width / rect.width);
+    lastPointerTime = performance.now();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+    if (!started) startGame();
+  }, {passive:false});
+  canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (!pointerActive) return;
+    const t = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    pointerX = (t.clientX - rect.left) * (canvas.width / rect.width);
+    lastPointerTime = performance.now();
+  }, {passive:false});
+  canvas.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    pointerActive = false;
+  }, {passive:false});
+
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'a') keyLeft = true;
+    if (e.key === 'ArrowRight' || e.key === 'd') keyRight = true;
+    if (e.key === ' ' || e.key === 'Spacebar') {
+      // small jump to attract items? For simplicity, space triggers small "scoop" that tries to collect nearest item under player
+      // (not necessary)
+    }
+    if (!started && (e.key === 'Enter')) startGame();
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.key === 'ArrowLeft' || e.key === 'a') keyLeft = false;
+    if (e.key === 'ArrowRight' || e.key === 'd') keyRight = false;
+  });
+
+  // Start/Restart controls
+  const startBtn = document.getElementById('startBtn');
+  const muteBtn = document.getElementById('muteBtn');
+  startBtn.addEventListener('click', () => {
+    if (!started) startGame();
+    else resetGame();
+  });
+  muteBtn.addEventListener('click', () => {
+    audioEnabled = !audioEnabled;
+    muteBtn.textContent = audioEnabled ? '静音' : '已静音';
+    muteBtn.style.background = audioEnabled ? '#444' : '#666';
+  });
+
+  function startGame() {
+    // initialize
+    started = true;
+    running = true;
+    lastTime = performance.now();
+    spawnTimer = 0;
+    spawnInterval = 800;
+    difficultyTimer = 0;
+    totalTime = 60;
+    timeLeft = totalTime;
+    score = 0;
+    aiScore = 0;
+    items = [];
+    itemIdCounter = 1;
+    player.x = W/2;
+    ai.x = W/2;
+    ai.focus = null;
+    // reduce initial mistake with slight randomness
+    ai.mistakeChance = 0.12;
+    if (audioEnabled) ensureAudio();
+    startBtn.textContent = '重新开始';
+    loop(lastTime);
+  }
+  function resetGame() {
+    started = false;
+    running = false;
+    startBtn.textContent = '开始游戏';
+    // draw start screen
+    drawStartScreen();
+  }
+
+  // Draw start screen initially
+  function drawStartScreen() {
+    ctx.clearRect(0,0,W,H);
+    // background gradient
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#062033'); g.addColorStop(1,'#001219');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.font = '700 22px Arial';
+    ctx.fillText('宝石争夺战', W/2, 120);
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#cfe';
+    ctx.fillText('收集从天而降的宝石，避免炸弹。', W/2, 150);
+    ctx.fillText('与AI对手竞速，谁拿到更多分数！', W/2, 170);
+
+    // sample player and AI
+    drawPlayerPreview();
+    ctx.font = '12px Arial';
+    ctx.fillStyle = '#9fd';
+    ctx.fillText('点击/触摸开始游戏', W/2, H - 60);
+    ctx.fillStyle = '#7fb';
+    ctx.fillText('移动：鼠标/触摸或 ← → 键', W/2, H - 40);
+  }
+
+  function drawPlayerPreview() {
+    // player
+    ctx.save();
+    ctx.translate(W/2 - 90, 220);
+    // player basket
+    ctx.fillStyle = player.color;
+    roundRect(ctx, -36, -10, 72, 20, 8, true, false);
+    // ai
+    ctx.translate(180, -40);
+    ctx.fillStyle = ai.color;
+    roundRect(ctx, -35, -10, 70, 18, 8, true, false);
+    // gems
+    ctx.restore();
+    // display small gem/star
+    drawGem(W/2 - 30, 260, 12, '#00ffd5');
+    drawStar(W/2 + 30, 260, 10, '#ffd700');
+    // bomb
+    drawBomb(W/2, 300, 10, '#222');
+    ctx.fillStyle = '#ffd';
+    ctx.font = '12px Arial';
+    ctx.fillText('+10  宝石   +30 星  -15 炸弹', W/2, 340);
+  }
+
+  // Utility drawing
+  function roundRect(ctx,x,y,w,h,r,fill,stroke){
+    if (typeof stroke === 'undefined') stroke = true;
+    if (typeof r === 'undefined') r = 5;
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+    if(fill){ ctx.fill(); }
+    if(stroke){ ctx.stroke(); }
+  }
+
+  function drawGem(x,y,size,color) {
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(Math.sin((x+y+performance.now()/6)/250) * 0.06);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(0,-size);
+    ctx.lineTo(size*0.6,-size*0.2);
+    ctx.lineTo(size*0.4,size*0.7);
+    ctx.lineTo(-size*0.4,size*0.7);
+    ctx.lineTo(-size*0.6,-size*0.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawStar(x,y,size,color) {
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i=0;i<5;i++){
+      ctx.lineTo(Math.cos((18+72*i)/180*Math.PI)*size, -Math.sin((18+72*i)/180*Math.PI)*size);
+      ctx.lineTo(Math.cos((54+72*i)/180*Math.PI)*size*0.5, -Math.sin((54+72*i)/180*Math.PI)*size*0.5);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawBomb(x,y,size,color) {
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(0,0,size,0,Math.PI*2);
+    ctx.fill();
+    ctx.fillStyle = '#666';
+    ctx.fillRect(size-2,-size-8,8,6);
+    ctx.restore();
+  }
+
+  // Main loop
+  function loop(time) {
+    if (!running) return;
+    const dt = Math.min(40, time - lastTime);
+    lastTime = time;
+    update(dt/1000);
+    draw();
+    if (timeLeft <= 0) {
+      running = false;
+      started = false;
+      setTimeout(()=> drawGameOver(), 220);
+      return;
+    }
+    requestAnimationFrame(loop);
+  }
+
+  function update(dt) {
+    // time
+    timeLeft -= dt;
+    if (timeLeft < 0) timeLeft = 0;
+
+    // spawn items
+    spawnTimer += dt*1000;
+    difficultyTimer += dt*1000;
+    // gradually increase spawn rate
+    const spawnDecay = Math.max(300, 800 - (totalTime - timeLeft) * 6); // min 300ms
+    if (spawnTimer >= spawnInterval) {
+      spawnTimer = 0;
+      spawnInterval = spawnDecay + Math.random()*220 - Math.min(220, (totalTime - timeLeft)*4);
+      spawnItem();
+    }
+
+    // keyboard movement
+    if (!pointerActive) {
+      if (keyLeft) player.vx = -player.maxSpeed;
+      else if (keyRight) player.vx = player.maxSpeed;
+      else player.vx = 0;
+      player.x += player.vx * dt;
+    } else {
+      // follow pointer smoothly (small smoothing)
+      const dx = pointerX - player.x;
+      player.x += dx * Math.min(12*dt, 1);
+    }
+    // clamp player
+    player.x = Math.max(player.w/2, Math.min(W - player.w/2, player.x));
+
+    // AI decision-making
+    updateAI(dt);
+
+    // update items
+    for (let it of items) {
+      it.y += it.vy * dt;
+    }
+
+    // collisions: check items near catch lines (player and ai)
+    // playerCatchZoneY and aiCatchZoneY
+    const playerCatchY = player.y - 8;
+    const aiCatchY = ai.y + 6;
+
+    // check each item for catches
+    for (let it of items) {
+      if (it.caught) continue;
+      // if item close to player horizontal and vertical in range -> catch
+      // give priority to whichever is closer at the time of passing catchY
+      // If item passes below H+20 it's missed.
+      if (it.y > H + 40) {
+        it.caught = true; // remove later
+        continue;
+      }
+      // Check player catch
+      const withinPlayerY = Math.abs(it.y - playerCatchY) < Math.max(12, it.vy * 0.02) + it.size;
+      const withinAIY = Math.abs(it.y - aiCatchY) < Math.max(12, it.vy * 0.02) + it.size;
+      let pCatch = false, aCatch = false;
+      if (withinPlayerY) {
+        const dx = Math.abs(it.x - player.x);
+        if (dx < Math.max(player.w/2, 26) + it.size) pCatch = true;
+      }
+      if (withinAIY) {
+        const dx2 = Math.abs(it.x - ai.x);
+        if (dx2 < Math.max(ai.w/2, 26) + it.size) aCatch = true;
+      }
+      if (pCatch && aCatch) {
+        // both catch: give to who is closer vertically or horizontally
+        const dp = Math.abs(it.x - player.x) + Math.abs(it.y - playerCatchY)*0.2;
+        const da = Math.abs(it.x - ai.x) + Math.abs(it.y - aiCatchY)*0.2;
+        if (dp <= da) {
+          applyCatch(it, 'player');
+        } else {
+          applyCatch(it, 'ai');
+        }
+      } else if (pCatch) {
+        applyCatch(it, 'player');
+      } else if (aCatch) {
+        applyCatch(it, 'ai');
+      }
+    }
+
+    // remove caught or out-of-screen items
+    items = items.filter(it => !it.caught && it.y < H + 80);
+  }
+
+  function applyCatch(it, who) {
+    it.caught = true;
+    if (who === 'player') {
+      // positive or negative
+      if (it.type === 'bomb') {
+        score += it.value; // negative
+        beep(120,0.08,'sine',0.14);
+      } else {
+        score += it.value;
+        // small combo/jitter effect
+        beep(it.type === 'star' ? 880 : 560, 0.08, 'sawtooth', 0.12);
+      }
+    } else {
+      // AI catches
+      if (it.type === 'bomb') {
+        aiScore += it.value; // negative
+        beep(160,0.07,'sine',0.08);
+      } else {
+        aiScore += it.value;
+        beep(it.type === 'star' ? 640 : 420, 0.06, 'triangle', 0.08);
+      }
+    }
+  }
+
+  function updateAI(dt) {
+    // AI reevaluates target occasionally
+    // choose item to intercept with highest expected reward/time and not predicted to be stolen by player if AI can't reach
+    // set target id in ai.focus
+    // Simple behavior: compute predicted time to reach y of AICatch, pick item with best score/time within reachable area
+    const aiCatchY = ai.y + 6;
+    // only consider items below top and above bottom
+    let best = null;
+    let now = performance.now();
+    for (let it of items) {
+      if (it.caught) continue;
+      // prediction time until reaching AI catch line
+      const t = (aiCatchY - it.y) / it.vy;
+      if (t < -0.35) continue; // already past
+      if (t < 0) continue;
+      // predicted x remains constant (no wind)
+      const dist = Math.abs(it.x - ai.x);
+      const timeToReach = dist / ai.maxSpeed;
+      // If AI can't reach in time, deprioritize
+      let reachable = timeToReach <= t + 0.15; // small buffer
+      // compute score weight, bombs are negative
+      const effectiveVal = it.value;
+      // prefer high value, prefer reachable
+      const scorePerSec = effectiveVal / Math.max(0.1, t);
+      const weight = scorePerSec * (reachable ? 1.2 : 0.5);
+      if (!best || weight > best.weight) best = {item: it, weight, reachable, t, timeToReach};
+    }
+
+    // occasionally make mistake: pick none or wrong
+    if (best) {
+      // reaction lag check: AI doesn't instantly shift target
+      if (!ai.focus || ai.focus.id !== best.item.id) {
+        // decide to focus or not based on mistakeChance
+        if (Math.random() > ai.mistakeChance) {
+          ai.focus = {id: best.item.id, setAt: now};
+        } else {
+          // mistake: choose some other random x or ignore for a bit
+          if (Math.random() < 0.5) {
+            // random dash to a random position
+            ai.focus = {id: null, x: Math.random()*W, setAt: now};
+          } else {
+            // deliberately ignore for a short time
+            ai.focus = {id: null, x: Math.min(W-20, Math.max(20, best.item.x + (Math.random()*120-60))), setAt: now + 200};
+          }
+        }
+      }
+    } else {
+      // no items -> position to center
+      if (!ai.focus || ai.focus.id !== null) {
+        ai.focus = {id: null, x: W/2, setAt: now};
+      }
+    }
+
+    // Move AI towards target, but respect reactionLag
+    if (ai.focus) {
+      if (ai.focus.setAt > now) {
+        // waiting due to temporary ignore
+      } else {
+        let targetX = ai.x;
+        if (ai.focus.id) {
+          const targetItem = items.find(it => it.id === ai.focus.id);
+          if (targetItem) targetX = targetItem.x;
+          else {
+            if (ai.focus.x !== undefined) targetX = ai.focus.x;
+            else targetX = W/2;
+            ai.focus.id = null;
+          }
+        } else {
+          if (ai.focus.x !== undefined) targetX = ai.focus.x;
+        }
+        // Add small smoothing and occasional overcorrection for "human feel"
+        const dx = targetX - ai.x;
+        const move = Math.sign(dx) * Math.min(Math.abs(dx), ai.maxSpeed * dt);
+        // sometimes AI accelerates to steal (if predicted player near a target, AI increases speed slightly)
+        let speedBoost = 1;
+        // Determine if AI should attempt to steal: if an item is also targetable by player soon
+        if (ai.focus.id) {
+          const it = items.find(it => it.id === ai.focus.id);
+          if (it) {
+            const playerCatchY = player.y - 8;
+            const tPlayer = (playerCatchY - it.y) / it.vy;
+            const tAI = (ai.y + 6 - it.y) / it.vy;
+            if (tPlayer > 0 && tAI > 0 && tAI <= tPlayer + 0.25) {
+              speedBoost = 1.25; // try to beat player
+            }
+          }
+        }
+        ai.x += move * speedBoost;
+        // randomness/friction
+        // clamp
+        ai.x = Math.max(ai.w/2, Math.min(W - ai.w/2, ai.x));
+      }
+    }
+
+    // gradually adjust AI mistake chance to scale difficulty (becomes smarter with time)
+    ai.mistakeChance = Math.max(0.02, 0.12 - (totalTime - timeLeft) * 0.0015);
+  }
+
+  function draw() {
+    // background
+    const g = ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#052233'); g.addColorStop(1,'#001219');
+    ctx.fillStyle = g;
+    ctx.fillRect(0,0,W,H);
+
+    // top HUD background
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    roundRect(ctx, 8, 8, W-16, 60, 10, true, false);
+
+    // scores and time
+    ctx.fillStyle = '#bfe';
+    ctx.font = '700 16px Arial';
+    ctx.textAlign = 'left';
+    ctx.fillText('你: ' + score, 18, 32);
+    ctx.fillStyle = '#fdb';
+    ctx.fillText('AI: ' + aiScore, 18, 54);
+
+    // time on right
+    ctx.textAlign = 'right';
+    ctx.fillStyle = '#fff';
+    ctx.font = '700 18px Arial';
+    const tl = Math.max(0, Math.ceil(timeLeft));
+    ctx.fillText('时间: ' + tl + 's', W-18, 38);
+
+    // draw items
+    for (let it of items) {
+      if (it.type === 'gem') drawGem(it.x, it.y, it.size, it.col);
+      else if (it.type === 'star') drawStar(it.x, it.y, it.size, it.col);
+      else drawBomb(it.x, it.y, it.size, it.col);
+      // slight glow
+      if (it.type !== 'bomb') {
+        ctx.beginPath(); ctx.fillStyle = 'rgba(255,255,255,0.03)';
+        ctx.ellipse(it.x, it.y+6, it.size*1.4, it.size*0.6, 0, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+
+    // draw AI basket above player
+    // Draw AI
+    ctx.save();
+    ctx.translate(ai.x, ai.y);
+    // shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    roundRect(ctx, -ai.w/2+2, 8, ai.w, ai.h, 8, true, false);
+    // body
+    ctx.fillStyle = ai.color;
+    roundRect(ctx, -ai.w/2, -6, ai.w, ai.h, 8, true, false);
+    // label
+    ctx.fillStyle = '#fff';
+    ctx.font = '600 12px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('AI', 0, 2);
+    ctx.restore();
+
+    // draw player basket
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.fillStyle = 'rgba(0,0,0,0.38)';
+    roundRect(ctx, -player.w/2+2, 10, player.w, player.h, 8, true, false);
+    ctx.fillStyle = player.color;
+    roundRect(ctx, -player.w/2, -8, player.w, player.h, 10, true, false);
+    ctx.fillStyle = '#fff';
+    ctx.font = '600 13px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('你', 0, 2);
+    ctx.restore();
+
+    // draw separation line between AI and player area
+    ctx.strokeStyle = 'rgba(255,255,255,0.03)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(6, ai.y + 36); ctx.lineTo(W-6, ai.y + 36); ctx.stroke();
+
+    // draw small instructions
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.font = '11px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('收集宝石与星星，避免炸弹。尽量比 AI 捡到更多！', W/2, H - 18);
+  }
+
+  function drawGameOver() {
+    // overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(0,0,W,H);
+    ctx.fillStyle = '#fff';
+    ctx.textAlign = 'center';
+    ctx.font = '700 28px Arial';
+    ctx.fillText('游戏结束', W/2, 160);
+    ctx.font = '18px Arial';
+    ctx.fillStyle = '#9ff';
+    ctx.fillText('你的分数: ' + score, W/2, 210);
+    ctx.fillStyle = '#fdb';
+    ctx.fillText('AI 分数: ' + aiScore, W/2, 240);
+
+    let resText = '你输了';
+    if (score > aiScore) resText = '你赢了！';
+    else if (score === aiScore) resText = '平局！';
+    ctx.font = '700 22px Arial';
+    ctx.fillStyle = '#ffd';
+    ctx.fillText(resText, W/2, 288);
+
+    ctx.font = '14px Arial';
+    ctx.fillStyle = '#cfe';
+    ctx.fillText('点击"重新开始"再战一次', W/2, 340);
+  }
+
+  // initial draw
+  drawStartScreen();
+
+  // small helper to ensure first audio unlock on user gesture - attach to canvas touch/clicks is done.
+  // --- end of main code ---
+})();
+</script>
+</body>
+</html>

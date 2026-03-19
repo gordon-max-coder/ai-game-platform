@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>太空射击</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            background-color: #000;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+        }
+        #gameOverScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            font-family: 'Press Start 2P', cursive; /* 假设有像素字体 */
+            display: none;
+            z-index: 100;
+            border: 2px solid #0ff;
+        }
+        #gameOverScreen h2 {
+            margin-top: 0;
+            color: #0ff;
+            font-size: 2em;
+        }
+        #gameOverScreen p {
+            font-size: 1.2em;
+            margin-bottom: 20px;
+        }
+        #gameOverScreen button {
+            background-color: #0ff;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1em;
+            font-weight: bold;
+            transition: background-color 0.3s, transform 0.1s;
+        }
+        #gameOverScreen button:hover {
+            background-color: #0af;
+            transform: scale(1.05);
+        }
+    </style>
+    <!-- 引入像素字体，如果需要 -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="gameOverScreen">
+        <h2>游戏结束！</h2>
+        <p>你的得分：<span id="finalScore">0</span></p>
+        <button id="restartButton">重新开始</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // 设置 Canvas 尺寸
+        canvas.width = 360;
+        canvas.height = 640;
+
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const restartButton = document.getElementById('restartButton');
+
+        let gameRunning = false;
+        let score = 0;
+        let lastTime = 0;
+        let deltaTime = 0;
+
+        // 玩家飞船
+        const player = {
+            x: canvas.width / 2 - 20,
+            y: canvas.height - 60,
+            width: 40,
+            height: 40,
+            speed: 200, // 像素/秒
+            dx: 0,
+            dy: 0,
+            lives: 3,
+            bulletType: 'normal', // 当前子弹类型
+            bulletDamage: 1,
+            bulletSpeed: 300,
+            fireRate: 0.2, // 每次发射间隔秒数
+            lastFireTime: 0,
+            hitCooldown: 1, // 被击中后的无敌时间
+            lastHitTime: 0,
+            isInvincible: false,
+        };
+
+        // 子弹类型配置
+        const bulletTypes = {
+            'normal': {
+                color: '#0f0',
+                width: 4,
+                height: 10,
+                damage: 1,
+                speed: 300,
+                fireRate: 0.2,
+                projectiles: 1 // 每次发射的子弹数量
+            },
+            'spread': {
+                color: '#ff0',
+                width: 6,
+                height: 12,
+                damage: 0.8,
+                speed: 250,
+                fireRate: 0.3,
+                projectiles: 3 // 发射3颗子弹，稍微分散
+            },
+            'pierce': {
+                color: '#0ff',
+                width: 5,
+                height: 15,
+                damage: 1.5,
+                speed: 400,
+                fireRate: 0.4,
+                projectiles: 1, // 穿透子弹
+                piercing: true
+            },
+            'heavy': {
+                color: '#f00',
+                width: 8,
+                height: 15,
+                damage: 2.5,
+                speed: 200,
+                fireRate: 0.5,
+                projectiles: 1
+            }
+        };
+
+        let playerBullets = [];
+        let enemies = [];
+        let enemyBullets = [];
+        let powerUps = [];
+
+        // 键盘输入
+        const keys = {};
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+        });
+
+        // 游戏状态
+        function resetGame() {
+            player.x = canvas.width / 2 - 20;
+            player.y = canvas.height - 60;
+            player.lives = 3;
+            player.bulletType = 'normal';
+            player.bulletDamage = bulletTypes.normal.damage;
+            player.bulletSpeed = bulletTypes.normal.speed;
+            player.fireRate = bulletTypes.normal.fireRate;
+            player.lastFireTime = 0;
+            player.isInvincible = false;
+            player.lastHitTime = 0;
+
+            score = 0;
+            playerBullets = [];
+            enemies = [];
+            enemyBullets = [];
+            powerUps = [];
+
+            gameRunning = true;
+            gameOverScreen.style.display = 'none';
+        }
+
+        // 绘制函数
+        function drawPlayer() {
+            ctx.fillStyle = player.isInvincible ? 'rgba(0, 255, 255, 0.7)' : '#00f';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            // 绘制一个简单的三角形表示飞船方向
+            ctx.beginPath();
+            ctx.moveTo(player.x + player.width / 2, player.y);
+            ctx.lineTo(player.x, player.y + player.height);
+            ctx.lineTo(player.x + player.width, player.y + player.height);
+            ctx.closePath();
+            ctx.fillStyle = player.isInvincible ? 'rgba(0, 255, 255, 0.7)' : '#00f';
+            ctx.fill();
+        }
+
+        function drawBullets(bullets, color) {
+            bullets.forEach(bullet => {
+                ctx.fillStyle = bullet.color || color;
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+        }
+
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                ctx.fillStyle = enemy.color;
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                // 绘制血条
+                const healthBarWidth = enemy.width;
+                const healthBarHeight = 3;
+                ctx.fillStyle = 'red';
+                ctx.fillRect(enemy.x, enemy.y - 5, healthBarWidth, healthBarHeight);
+                ctx.fillStyle = 'lime';
+                ctx.fillRect(enemy.x, enemy.y - 5, healthBarWidth * (enemy.health / enemy.maxHealth), healthBarHeight);
+            });
+        }
+
+        function drawPowerUps() {
+            powerUps.forEach(powerUp => {
+                ctx.fillStyle = powerUp.color;
+                ctx.beginPath();
+                ctx.arc(powerUp.x + powerUp.width / 2, powerUp.y + powerUp.height / 2, powerUp.width / 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(powerUp.type[0].toUpperCase(), powerUp.x + powerUp.width / 2, powerUp.y + powerUp.height / 2);
+            });
+        }
+
+        function drawUI() {
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px "Press Start 2P"';
+            ctx.fillText(`得分: ${score}`, 10, 20);
+            ctx.fillText(`生命: ${player.lives}`, 10, 40);
+            ctx.fillText(`子弹: ${player.bulletType.toUpperCase()}`, 10, 60);
+        }
+
+        // 更新函数
+        function updatePlayer(dt) {
+            player.dx = 0;
+            player.dy = 0;
+
+            if (keys['ArrowLeft'] || keys['KeyA']) player.dx = -1;
+            if (keys['ArrowRight'] || keys['KeyD']) player.dx = 1;
+            if (keys['ArrowUp'] || keys['KeyW']) player.dy = -1;
+            if (keys['ArrowDown'] || keys['KeyS']) player.dy = 1;
+
+            if (player.dx !== 0 && player.dy !== 0) {
+                // 斜向移动速度不变
+                const diagonalSpeed = player.speed / Math.sqrt(2);
+                player.x += player.dx * diagonalSpeed * dt;
+                player.y += player.dy * diagonalSpeed * dt;
+            } else {
+                player.x += player.dx * player.speed * dt;
+                player.y += player.dy * player.speed * dt;
+            }
+
+            // 边界检测
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            if (player.y < 0) player.y = 0;
+            if (player.y + player.height > canvas.height) player.y = canvas.height - player.height;
+
+            // 射击
+            if (keys['Space'] && (performance.now() / 1000 - player.lastFireTime) > player.fireRate) {
+                firePlayerBullet();
+                player.lastFireTime = performance.now() / 1000;
+            }
+
+            // 无敌时间
+            if (player.isInvincible && (performance.now() / 1000 - player.lastHitTime) > player.hitCooldown) {
+                player.isInvincible = false;
+            }
+        }
+
+        function firePlayerBullet() {
+            const bulletConfig = bulletTypes[player.bulletType];
+            const baseDamage = bulletConfig.damage;
+            const baseSpeed = bulletConfig.speed;
+            const baseWidth = bulletConfig.width;
+            const baseHeight = bulletConfig.height;
+            const baseColor = bulletConfig.color;
+            const piercing = bulletConfig.piercing || false;
+
+            if (bulletConfig.projectiles === 1) {
+                playerBullets.push({
+                    x: player.x + player.width / 2 - baseWidth / 2,
+                    y: player.y,
+                    width: baseWidth,
+                    height: baseHeight,
+                    speed: baseSpeed,
+                    damage: baseDamage,
+                    color: baseColor,
+                    piercing: piercing
+                });
+            } else if (bulletConfig.projectiles === 3) { // 散射
+                playerBullets.push({
+                    x: player.x + player.width / 2 - baseWidth / 2,
+                    y: player.y,
+                    width: baseWidth,
+                    height: baseHeight,
+                    speed: baseSpeed,
+                    damage: baseDamage,
+                    color: baseColor,
+                    piercing: piercing,
+                    angle: 0
+                });
+                playerBullets.push({
+                    x: player.x + player.width / 2 - baseWidth / 2 - 10,
+                    y: player.y + 5,
+                    width: baseWidth,
+                    height: baseHeight,
+                    speed: baseSpeed,
+                    damage: baseDamage,
+                    color: baseColor,
+                    piercing: piercing,
+                    angle: -0.2 // 稍微偏左
+                });
+                playerBullets.push({
+                    x: player.x + player.width / 2 - baseWidth / 2 + 10,
+                    y: player.y + 5,
+                    width: baseWidth,
+                    height: baseHeight,
+                    speed: baseSpeed,
+                    damage: baseDamage,
+                    color: baseColor,
+                    piercing: piercing,
+                    angle: 0.2 // 稍微偏右
+                });
+            }
+        }
+
+        function updatePlayerBullets(dt) {
+            playerBullets = playerBullets.filter(bullet => {
+                if (bullet.angle) { // 散射子弹
+                    bullet.x += bullet.speed * Math.sin(bullet.angle) * dt;
+                    bullet.y -= bullet.speed * Math.cos(bullet.angle) * dt;
+                } else {
+                    bullet.y -= bullet.speed * dt;
+                }
+                return bullet.y + bullet.height > 0; // 移除超出屏幕的子弹
+            });
+        }
+
+        function updateEnemies(dt) {
+            enemies.forEach(enemy => {
+                enemy.y += enemy.speed * dt;
+                if (enemy.y > canvas.height) { // 敌人超出屏幕底部
+                    enemy.remove = true;
+                }
+
+                // 敌人射击
+                if ((performance.now() / 1000 - enemy.lastFireTime) > enemy.fireRate) {
+                    enemyBullets.push({
+                        x: enemy.x + enemy.width / 2 - 2,
+                        y: enemy.y + enemy.height,
+                        width: 4,
+                        height: 8,
+                        speed: 150,
+                        damage: 1,
+                        color: '#f80'
+                    });
+                    enemy.lastFireTime = performance.now() / 1000;
+                }
+            });
+            enemies = enemies.filter(enemy => !enemy.remove);
+        }
+
+        function updateEnemyBullets(dt) {
+            enemyBullets = enemyBullets.filter(bullet => {
+                bullet.y += bullet.speed * dt;
+                return bullet.y < canvas.height; // 移除超出屏幕的子弹
+            });
+        }
+
+        function updatePowerUps(dt) {
+            powerUps.forEach(powerUp => {
+                powerUp.y += powerUp.speed * dt;
+            });
+            powerUps = powerUps.filter(powerUp => powerUp.y < canvas.height); // 移除超出屏幕的道具
+        }
+
+        // 碰撞检测
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+
+        function handleCollisions() {
+            // 玩家子弹与敌人
+            playerBullets.forEach(bullet => {
+                enemies.forEach(enemy => {
+                    if (!bullet.remove && !enemy.remove && checkCollision(bullet, enemy)) {
+                        enemy.health -= bullet.damage;
+                        if (!bullet.piercing) {
+                            bullet.remove = true; // 非穿透子弹击中后移除
+                        }
+
+                        if (enemy.health <= 0) {
+                            enemy.remove = true;
+                            score += 100; // 击败敌人得分
+                            spawnPowerUp(enemy.x, enemy.y); // 随机掉落道具
+                        }
+                    }
+                });
+            });
+            playerBullets = playerBullets.filter(bullet => !bullet.remove);
+
+            // 敌人子弹与玩家
+            enemyBullets.forEach(bullet => {
+                if (!bullet.remove && checkCollision(bullet, player)) {
+                    if (!player.isInvincible) {
+                        player.lives--;
+                        player.isInvincible = true;
+                        player.lastHitTime = performance.now() / 1000;
+                        bullet.remove = true;
+                        if (player.lives <= 0) {
+                            gameOver();
+                        }
+                    }
+                }
+            });
+            enemyBullets = enemyBullets.filter(bullet => !bullet.remove);
+
+            // 敌人与玩家
+            enemies.forEach(enemy => {
+                if (!enemy.remove && checkCollision(enemy, player)) {
+                    if (!player.isInvincible) {
+                        player.lives--;
+                        player.isInvincible = true;
+                        player.lastHitTime = performance.now() / 1000;
+                        enemy.remove = true; // 敌人撞到玩家也销毁
+                        if (player.lives <= 0) {
+                            gameOver();
+                        }
+                    }
+                }
+            });
+
+            // 道具与玩家
+            powerUps.forEach(powerUp => {
+                if (!powerUp.remove && checkCollision(powerUp, player)) {
+                    applyPowerUp(powerUp.type);
+                    powerUp.remove = true;
+                }
+            });
+            powerUps = powerUps.filter(powerUp => !powerUp.remove);
+        }
+
+        // 敌人生成
+        let enemySpawnTimer = 0;
+        const enemySpawnInterval = 1.5; // 秒
+        function spawnEnemy(dt) {
+            enemySpawnTimer += dt;
+            if (enemySpawnTimer >= enemySpawnInterval) {
+                const enemyWidth = 30;
+                const enemyHeight = 30;
+                const x = Math.random() * (canvas.width - enemyWidth);
+                const speed = 50 + Math.random() * 50;
+                const health = 2 + Math.floor(Math.random() * 3); // 敌人血量
+                enemies.push({
+                    x: x,
+                    y: -enemyHeight,
+                    width: enemyWidth,
+                    height: enemyHeight,
+                    speed: speed,
+                    color: 'purple',
+                    health: health,
+                    maxHealth: health,
+                    fireRate: 1 + Math.random() * 1.5, // 敌人射击间隔
+                    lastFireTime: performance.now() / 1000,
+                    remove: false
+                });
+                enemySpawnTimer = 0;
+            }
+        }
+
+        // 道具生成
+        const powerUpTypes = ['spread', 'pierce', 'heavy']; // 增加生命值的道具也可以
+        function spawnPowerUp(x, y) {
+            if (Math.random() < 0.3) { // 30%概率掉落道具
+                const type = powerUpTypes[Math.floor(Math.random() * powerUpTypes.length)];
+                powerUps.push({
+                    x: x,
+                    y: y,
+                    width: 20,
+                    height: 20,
+                    speed: 100,
+                    type: type,
+                    color: bulletTypes[type].color, // 道具颜色与子弹颜色一致
+                    remove: false
+                });
+            }
+        }
+
+        function applyPowerUp(type) {
+            player.bulletType = type;
+            const config = bulletTypes[type];
+            player.bulletDamage = config.damage;
+            player.bulletSpeed = config.speed;
+            player.fireRate = config.fireRate;
+
+            // 设置一个计时器，让道具效果持续一段时间
+            clearTimeout(player.powerUpTimer);
+            player.powerUpTimer = setTimeout(() => {
+                player.bulletType = 'normal';
+                player.bulletDamage = bulletTypes.normal.damage;
+                player.bulletSpeed = bulletTypes.normal.speed;
+                player.fireRate = bulletTypes.normal.fireRate;
+            }, 10000); // 道具效果持续10秒
+        }
+
+        // 游戏结束
+        function gameOver() {
+            gameRunning = false;
+            finalScoreDisplay.textContent = score;
+            gameOverScreen.style.display = 'block';
+        }
+
+        // 游戏循环
+        function gameLoop(currentTime) {
+            if (!gameRunning) return;
+
+            deltaTime = (currentTime - lastTime) / 1000; // 转换为秒
+            lastTime = currentTime;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // 清除画布
+
+            // 更新
+            updatePlayer(deltaTime);
+            updatePlayerBullets(deltaTime);
+            spawnEnemy(deltaTime);
+            updateEnemies(deltaTime);
+            updateEnemyBullets(deltaTime);
+            updatePowerUps(deltaTime);
+            handleCollisions();
+
+            // 绘制
+            drawPlayer();
+            drawBullets(playerBullets, '#0f0');
+            drawEnemies();
+            drawBullets(enemyBullets, '#f00');
+            drawPowerUps();
+            drawUI();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 重新开始按钮事件
+        restartButton.addEventListener('click', () => {
+            resetGame();
+            lastTime = performance.now(); // 重置时间
+            requestAnimationFrame(gameLoop);
+        });
+
+        // 游戏开始
+        resetGame();
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+
+    </script>
+</body>
+</html>

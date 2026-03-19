@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>太空射击游戏</title>
+    <style>
+        body { margin: 0; background: #0f0f1a; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+        canvas { 
+            width: 360px; height: 640px; 
+            max-width: 100%; height: auto; display: block; margin: 0 auto;
+            border-radius: 12px; box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        }
+    </style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 360;
+    canvas.height = 640;
+
+    let state = 'menu'; // menu, playing, gameover
+    let score = 0;
+    let highScore = localStorage.getItem('spaceShooterHighScore') || 0;
+    let player = { x: 170, y: 550, w: 40, h: 40, speed: 5 };
+    let bullets = [];
+    let enemies = [];
+    let frameCount = 0;
+
+    function handleInput(key, pressed) {
+        if (state === 'menu' && key === 'Enter') state = 'playing';
+        if (state === 'gameover' && key === 'Enter') {
+            score = 0; bullets = []; enemies = []; state = 'playing';
+        }
+        if (state === 'playing') {
+            if (key === 'ArrowLeft') player.x = Math.max(0, player.x - 20);
+            if (key === 'ArrowRight') player.x = Math.min(320, player.x + 20);
+            if (key === ' ') bullets.push({ x: player.x + 18, y: player.y, w: 4, h: 10 });
+        }
+    }
+
+    window.addEventListener('keydown', (e) => handleInput(e.key, true));
+
+    function update(deltaTime) {
+        if (state !== 'playing') return;
+        
+        frameCount++;
+        if (frameCount % 30 === 0) enemies.push({ x: Math.random() * 320, y: -40, w: 30, h: 30, speed: 2 + score / 500 });
+
+        bullets.forEach((b, i) => {
+            b.y -= 7;
+            if (b.y < 0) bullets.splice(i, 1);
+        });
+
+        enemies.forEach((e, i) => {
+            e.y += e.speed;
+            if (e.y > 640) { state = 'gameover'; if(score > highScore) { highScore = score; localStorage.setItem('spaceShooterHighScore', score); } }
+            bullets.forEach((b, bi) => {
+                if (b.x < e.x + e.w && b.x + b.w > e.x && b.y < e.y + e.h && b.y + b.h > e.y) {
+                    enemies.splice(i, 1); bullets.splice(bi, 1); score += 10;
+                }
+            });
+        });
+    }
+
+    function render() {
+        ctx.clearRect(0, 0, 360, 640);
+        
+        if (state === 'menu') {
+            ctx.fillStyle = 'white'; ctx.textAlign = 'center';
+            ctx.fillText('按回车键开始游戏', 180, 320);
+        } else if (state === 'playing' || state === 'gameover') {
+            ctx.fillStyle = '#4fd1c5'; ctx.fillRect(player.x, player.y, player.w, player.h);
+            bullets.forEach(b => { ctx.fillStyle = '#fff'; ctx.fillRect(b.x, b.y, b.w, b.h); });
+            ctx.fillStyle = '#f56565';
+            enemies.forEach(e => ctx.fillRect(e.x, e.y, e.w, e.h));
+            
+            ctx.fillStyle = 'white'; ctx.font = '20px Arial';
+            ctx.fillText(`得分: `, 160, 30);
+            ctx.fillStyle = '#4fd1c5'; ctx.fillText(score, 210, 30);
+        }
+
+        if (state === 'gameover') {
+            ctx.fillStyle = 'white'; ctx.fillText('游戏结束', 180, 300);
+            ctx.fillText('最高分: ' + highScore, 180, 340);
+        }
+        requestAnimationFrame(() => { update(); render(); });
+    }
+
+    render();
+</script>
+</body>
+</html>

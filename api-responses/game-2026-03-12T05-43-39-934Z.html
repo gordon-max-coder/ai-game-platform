@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>贪食蛇 - Canvas 360x640</title>
+  <style>
+    html,body {
+      height: 100%;
+      margin: 0;
+      background: linear-gradient(180deg,#0b1220,#071428);
+      color: #fff;
+      font-family: -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      -webkit-tap-highlight-color: transparent;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 18px 8px;
+      box-sizing: border-box;
+    }
+
+    /* Required by the user */
+    canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; }
+
+    .hint {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 13px;
+      color: rgba(255,255,255,0.85);
+      background: rgba(0,0,0,0.18);
+      padding: 6px 10px;
+      border-radius: 12px;
+      backdrop-filter: blur(6px);
+      pointer-events: none;
+    }
+
+    .buttons {
+      position: absolute;
+      bottom: 18px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 10px;
+    }
+
+    button {
+      font-size: 14px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(255,255,255,0.06);
+      color: #fff;
+      cursor: pointer;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+    }
+
+    button:active { transform: translateY(1px); }
+    a.small {
+      display:inline-block;
+      margin-left:8px;
+      color: rgba(255,255,255,0.8);
+      font-size:12px;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="hint">方向键 / WASD 控制，或滑动屏幕。按 P 暂停，Enter 重玩</div>
+  <canvas id="game"></canvas>
+
+  <div class="buttons" aria-hidden="true">
+    <button id="pauseBtn">暂停</button>
+    <button id="restartBtn">重玩</button>
+  </div>
+
+  <script>
+  // Canvas requirements
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  canvas.width = 360; // 必须这样设置
+  canvas.height = 640; // 必须这样设置
+
+  // Constants for grid
+  const TILE = 20;
+  const COLS = Math.floor(canvas.width / TILE); // 18
+  const ROWS = Math.floor(canvas.height / TILE); // 32
+
+  // Game variables
+  let snake = [];
+  let dir = { x: 1, y: 0 };
+  let nextDir = { x: 1, y: 0 };
+  let apple = null;
+  let goldenApple = null;
+  let goldenTimer = 0;
+  let particles = [];
+  let score = 0;
+  let highScore = parseInt(localStorage.getItem('snake_highscore_v1') || '0', 10);
+  let gameOver = false;
+  let paused = false;
+  let lastTime = 0;
+  let accumulator = 0;
+  let speed = 6; // moves per second
+  const baseSpeed = 6;
+  const maxSpeed = 18;
+  const speedUpEvery = 5; // 每吃几个苹果加速一次
+  let movesSinceLastSpeedUp = 0;
+  let moveInterval = 1000 / speed; // ms per move
+
+  // For touch controls
+  let touchStart = null;
+
+  // Colors
+  const colors = {
+    bg1: '#071428',
+    bg2: '#0b1220',
+    grid: 'rgba(255,255,255,0.03)',
+    snakeHead: '#6ef4a1',
+    snakeBodyA: '#39d98a',
+    snakeBodyB: '#1f7d57',
+    apple: '#ff4d6d',
+    golden: '#ffd166',
+    text: '#e6f7ff'
+  };
+
+  // Initialize
+  function init() {
+    snake = [];
+    const startLen = 5;
+    const startX = Math.floor(COLS / 2);
+    const startY = Math.floor(ROWS / 2);
+    for (let i = 0; i < startLen; i++) {
+      snake.push({ x: startX - i, y: startY });
+    }
+    dir = { x: 1, y: 0 };
+    nextDir = { x: 1, y: 0 };
+    score = 0;
+    speed = baseSpeed;
+    moveInterval = 1000 / speed;
+    movesSinceLastSpeedUp = 0;
+    gameOver = false;
+    paused = false;
+    placeApple();
+    goldenApple = null;
+    goldenTimer = randRange(5000, 15000); // ms until golden apple can appear
+    particles = [];
+    lastTime = performance.now();
+    accumulator = 0;
+  }
+
+  // Helpers
+  function randRange(a, b) {
+    return Math.floor(Math.random() * (b - a + 1)) + a;
+  }
+
+  function placeApple() {
+    const occupied = new Set(snake.map(s => s.x + ':' + s.y));
+    let px, py;
+    do {
+      px = Math.floor(Math.random() * COLS);
+      py = Math.floor(Math.random() * ROWS);
+    } while (occupied.has(px + ':' + py));
+    apple = { x: px, y: py };
+  }
+
+  function placeGolden() {
+    if (goldenApple) return;
+    const occupied = new Set(snake.map(s => s.x + ':' + s.y));
+    occupied.add(apple.x + ':' + apple.y);
+    let px, py;
+    let attempts = 0;
+    do {
+      px = Math.floor(Math.random() * COLS);
+      py = Math.floor(Math.random() * ROWS);
+      attempts++;
+      if (attempts > 200) break;
+    } while (occupied.has(px + ':' + py));
+    goldenApple = { x: px, y: py, life: 7000 }; // golden apple lasts 7s
+  }
+
+  function collideSelf(x, y) {
+    return snake.some(seg => seg.x === x && seg.y === y);
+  }
+
+  // Game update (discrete grid updates)
+  function update() {
+    if (gameOver || paused) return;
+
+    // Apply next direction (prevent reversing)
+    if ((nextDir.x !== -dir.x || nextDir.y !== -dir.y) || snake.length === 1) {
+      dir = nextDir;
+    }
+
+    const head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+
+    // Wall collision -> game over
+    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS) {
+      endGame();
+      return;
+    }
+    // Self collision
+    if (collideSelf(head.x, head.y)) {
+      endGame();
+      return;
+    }
+
+    // Move snake
+    snake.unshift(head);
+
+    // Eat apple?
+    if (apple && head.x === apple.x && head.y === apple.y) {
+      eatApple(false);
+    } else if (goldenApple && head.x === goldenApple.x && head.y === goldenApple.y) {
+      eatApple(true);
+    } else {
+      snake.pop();
+    }
+
+    // Golden apple timer countdown
+    if (!goldenApple) {
+      goldenTimer -= moveInterval;
+      if (goldenTimer <= 0) {
+        placeGolden();
+      }
+    } else {
+      goldenApple.life -= moveInterval;
+      if (goldenApple.life <= 0) {
+        goldenApple = null;
+        goldenTimer = randRange(8000, 18000);
+      }
+    }
+  }
+
+  function eatApple(isGolden) {
+    if (isGolden) {
+      const gain = 5 + Math.floor(score / 10);
+      score += gain;
+      // Golden apple gives speed boost temporarily
+      speed = Math.min(maxSpeed, speed + 2);
+      moveInterval = 1000 / speed;
+      spawnParticles(apple.x * TILE + TILE / 2, apple.y * TILE + TILE / 2, 18, colors.golden);
+      goldenApple = null;
+      goldenTimer = randRange(12000, 22000);
+      placeApple();
+      movesSinceLastSpeedUp = 0;
+    } else {
+      score += 1;
+      spawnParticles(apple.x * TILE + TILE / 2, apple.y * TILE + TILE / 2, 10, colors.apple);
+      placeApple();
+      movesSinceLastSpeedUp++;
+      // Speed up every few apples
+      if (movesSinceLastSpeedUp >= speedUpEvery) {
+        speed = Math.min(maxSpeed, speed + 1);
+        moveInterval = 1000 / speed;
+        movesSinceLastSpeedUp = 0;
+      }
+    }
+    // Update high score
+    if (score > highScore) {
+      highScore = score;
+      localStorage.setItem('snake_highscore_v1', highScore);
+    }
+  }
+
+  function endGame() {
+    gameOver = true;
+    spawnParticles(snake[0].x * TILE + TILE / 2, snake[0].y * TILE + TILE / 2, 26, '#ff8080');
+  }
+
+  // Particle system for nice visuals
+  function spawnParticles(x, y, n, color) {
+    for (let i = 0; i < n; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = Math.random() * 2 + 0.6;
+      particles.push({
+        x: x,
+        y: y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: Math.random() * 600 + 400,
+        age: 0,
+        color: color,
+        size: Math.random() * 3 + 1
+      });
+    }
+  }
+
+  function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.vy += 0.02 * dt; // slight gravity
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.age += dt;
+      if (p.age >= p.life) particles.splice(i, 1);
+    }
+  }
+
+  // Draw functions
+  function drawBackground() {
+    const g = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    g.addColorStop(0, colors.bg1);
+    g.addColorStop(1, colors.bg2);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // subtle grid
+    ctx.strokeStyle = colors.grid;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= COLS; x++) {
+      const px = x * TILE + 0.5;
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, canvas.height);
+    }
+    for (let y = 0; y <= ROWS; y++) {
+      const py = y * TILE + 0.5;
+      ctx.moveTo(0, py);
+      ctx.lineTo(canvas.width, py);
+    }
+    ctx.stroke();
+  }
+
+  function drawSnake() {
+    // Draw body
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const s = snake[i];
+      const x = s.x * TILE;
+      const y = s.y * TILE;
+      const t = i % 2 === 0 ? colors.snakeBodyA : colors.snakeBodyB;
+      ctx.fillStyle = t;
+      roundRect(ctx, x + 1, y + 1, TILE - 2, TILE - 2, 4);
+      ctx.fill();
+    }
+    // Head
+    const head = snake[0];
+    ctx.fillStyle = colors.snakeHead;
+    roundRect(ctx, head.x * TILE + 1, head.y * TILE + 1, TILE - 2, TILE - 2, 4);
+    ctx.fill();
+
+    // Eye
+    ctx.fillStyle = '#072117';
+    const hx = head.x * TILE;
+    const hy = head.y * TILE;
+    let ex = hx + (dir.x > 0 ? TILE * 0.7 : dir.x < 0 ? TILE * 0.3 : TILE * 0.5);
+    let ey = hy + (dir.y > 0 ? TILE * 0.7 : dir.y < 0 ? TILE * 0.3 : TILE * 0.4);
+    ctx.beginPath();
+    ctx.arc(ex, ey, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawApples() {
+    // Regular apple with simple shine
+    if (apple) {
+      const ax = apple.x * TILE;
+      const ay = apple.y * TILE;
+      drawCircleCell(ax + TILE / 2, ay + TILE / 2, TILE * 0.38, colors.apple);
+      // leaf
+      ctx.fillStyle = '#2b8b5c';
+      ctx.beginPath();
+      ctx.ellipse(ax + TILE / 2 - 2, ay + TILE / 2 - TILE * 0.45, 3, 6, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (goldenApple) {
+      const ax = goldenApple.x * TILE;
+      const ay = goldenApple.y * TILE;
+      drawCircleCell(ax + TILE / 2, ay + TILE / 2, TILE * 0.44, colors.golden, true);
+      // small glow
+      const g = ctx.createRadialGradient(ax + TILE / 2, ay + TILE / 2, 2, ax + TILE / 2, ay + TILE / 2, TILE);
+      g.addColorStop(0, 'rgba(255,210,110,0.9)');
+      g.addColorStop(1, 'rgba(255,210,110,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(ax + TILE / 2, ay + TILE / 2, TILE * 0.9, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawCircleCell(cx, cy, r, color, shiny=false) {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // shine
+    if (!shiny) {
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(cx - r * 0.4, cy - r * 0.6, r * 0.45, r * 0.25, -0.4, 0, Math.PI * 2);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.beginPath();
+      ctx.ellipse(cx - r * 0.2, cy - r * 0.55, r * 0.36, r * 0.22, -0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      const alpha = 1 - p.age / p.life;
+      ctx.fillStyle = hexToRgba(p.color, alpha);
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawHud() {
+    // Top panel
+    const pad = 8;
+    const panelW = canvas.width - pad * 2;
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    roundRect(ctx, pad, pad, panelW, 36, 8);
+    ctx.fill();
+
+    ctx.fillStyle = colors.text;
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('得分: ' + score, pad + 10, pad + 18);
+
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.fillText('最高: ' + highScore, canvas.width - pad - 10, pad + 18);
+
+    // center small message
+    if (paused) {
+      ctx.fillStyle = 'rgba(255,255,255,0.9)';
+      ctx.font = '600 14px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('已暂停', canvas.width / 2, pad + 18);
+    }
+    if (gameOver) {
+      // overlay
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = 'rgba(255,255,255,0.98)';
+      ctx.textAlign = 'center';
+      ctx.font = '700 34px Arial';
+      ctx.fillText('游戏结束', canvas.width / 2, canvas.height / 2 - 24);
+      ctx.font = '600 18px Arial';
+      ctx.fillText('得分: ' + score, canvas.width / 2, canvas.height / 2 + 6);
+      ctx.font = '500 14px Arial';
+      ctx.fillText('按 Enter 或 点击 重玩', canvas.width / 2, canvas.height / 2 + 40);
+    }
+  }
+
+  // Utility draw helpers
+  function roundRect(ctx, x, y, w, h, r) {
+    const radius = r || 4;
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.arcTo(x + w, y, x + w, y + h, radius);
+    ctx.arcTo(x + w, y + h, x, y + h, radius);
+    ctx.arcTo(x, y + h, x, y, radius);
+    ctx.arcTo(x, y, x + w, y, radius);
+    ctx.closePath();
+  }
+
+  function hexToRgba(hex, a) {
+    // hex like #rrggbb or #rgb
+    let c = hex.replace('#','');
+    if (c.length === 3) c = c.split('').map(s => s + s).join('');
+    const num = parseInt(c, 16);
+    const r = (num >> 16) & 255;
+    const g = (num >> 8) & 255;
+    const b = num & 255;
+    return 'rgba(' + r + ',' + g + ',' + b + ',' + (a || 1) + ')';
+  }
+
+  // Main loop
+  function loop(now) {
+    const dtMs = now - lastTime;
+    lastTime = now;
+
+    // Limit dt to avoid jump on tab switch
+    const maxDt = 100;
+    const dt = Math.min(dtMs, maxDt);
+
+    if (!paused && !gameOver) {
+      accumulator += dt;
+      // ensure updates occur at consistent intervals based on current speed
+      while (accumulator >= moveInterval) {
+        update();
+        accumulator -= moveInterval;
+      }
+    }
+
+    updateParticles(dt);
+
+    // Render
+    drawBackground();
+    drawApples();
+    drawSnake();
+    drawParticles();
+    drawHud();
+
+    requestAnimationFrame(loop);
+  }
+
+  // Controls
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') setNextDir(0, -1);
+    if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') setNextDir(0, 1);
+    if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') setNextDir(-1, 0);
+    if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') setNextDir(1, 0);
+    if (e.key === 'p' || e.key === 'P' || e.code === 'Space') togglePause();
+    if (e.key === 'Enter') {
+      if (gameOver) init();
+    }
+  });
+
+  function setNextDir(x, y) {
+    // Prevent immediate reverse on single-cell snake edge-case handled in update
+    if (!gameOver && !paused) {
+      if (nextDir.x === x && nextDir.y === y) return;
+      // Prevent reversing into itself unless length == 1
+      if (snake.length > 1 && x === -dir.x && y === -dir.y) return;
+      nextDir = { x, y };
+    }
+  }
+
+  // Touch swipe
+  canvas.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 1) {
+      const t = e.touches[0];
+      touchStart = { x: t.clientX, y: t.clientY, time: performance.now() };
+    }
+    e.preventDefault();
+  }, {passive:false});
+
+  canvas.addEventListener('touchend', (e) => {
+    if (!touchStart) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    const absX = Math.abs(dx);
+    const absY = Math.abs(dy);
+    if (Math.max(absX, absY) > 20) {
+      if (absX > absY) {
+        setNextDir(dx > 0 ? 1 : -1, 0);
+      } else {
+        setNextDir(0, dy > 0 ? 1 : -1);
+      }
+    } else {
+      // tap toggles pause when small touch
+      togglePause();
+    }
+    touchStart = null;
+    e.preventDefault();
+  }, {passive:false});
+
+  // Buttons
+  document.getElementById('pauseBtn').addEventListener('click', () => {
+    togglePause();
+  });
+  document.getElementById('restartBtn').addEventListener('click', () => {
+    init();
+  });
+
+  function togglePause() {
+    if (gameOver) return;
+    paused = !paused;
+    document.getElementById('pauseBtn').textContent = paused ? '继续' : '暂停';
+  }
+
+  // Start game
+  init();
+  requestAnimationFrame(loop);
+
+  </script>
+</body>
+</html>

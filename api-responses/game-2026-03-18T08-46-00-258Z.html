@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>速度太快了 - AI吃食物游戏</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 360;
+        canvas.height = 640;
+
+        // 游戏状态
+        let gameState = 'menu'; // menu, playing, paused, gameover
+        let player, ai, foods, playerScore, aiScore, highScore;
+        let lastTime = 0;
+        let deltaTime = 0;
+
+        // 输入状态
+        const keys = {};
+
+        // 初始化游戏
+        function init() {
+            player = {
+                x: canvas.width / 4,
+                y: canvas.height / 2,
+                radius: 15,
+                speed: 300, // 像素每秒
+                color: '#4fd1c5',
+                score: 0
+            };
+            ai = {
+                x: canvas.width * 3 / 4,
+                y: canvas.height / 2,
+                radius: 15,
+                speed: 250,
+                color: '#ff6b6b',
+                score: 0
+            };
+            foods = [];
+            for (let i = 0; i < 10; i++) {
+                foods.push(createFood());
+            }
+            playerScore = 0;
+            aiScore = 0;
+            highScore = localStorage.getItem('highScore') || 0;
+        }
+
+        // 创建食物
+        function createFood() {
+            return {
+                x: Math.random() * (canvas.width - 20) + 10,
+                y: Math.random() * (canvas.height - 20) + 10,
+                radius: 8,
+                color: '#ffd93d'
+            };
+        }
+
+        // 输入处理
+        function handleInput(key, pressed) {
+            if (gameState === 'menu' && key === ' ' && pressed) {
+                gameState = 'playing';
+                init();
+                lastTime = performance.now();
+            } else if (gameState === 'playing' && key === 'p' && pressed) {
+                gameState = 'paused';
+            } else if (gameState === 'paused' && key === 'p' && pressed) {
+                gameState = 'playing';
+                lastTime = performance.now();
+            } else if (gameState === 'gameover' && key === ' ' && pressed) {
+                gameState = 'menu';
+            }
+        }
+
+        // 键盘事件监听
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            handleInput(e.key, true);
+        });
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+            handleInput(e.key, false);
+        });
+
+        // 游戏逻辑更新
+        function update(deltaTime) {
+            if (gameState !== 'playing') return;
+
+            // 玩家移动
+            let dx = 0, dy = 0;
+            if (keys['ArrowUp'] || keys['w']) dy -= 1;
+            if (keys['ArrowDown'] || keys['s']) dy += 1;
+            if (keys['ArrowLeft'] || keys['a']) dx -= 1;
+            if (keys['ArrowRight'] || keys['d']) dx += 1;
+
+            if (dx !== 0 || dy !== 0) {
+                const length = Math.sqrt(dx * dx + dy * dy);
+                dx /= length;
+                dy /= length;
+            }
+
+            player.x += dx * player.speed * deltaTime;
+            player.y += dy * player.speed * deltaTime;
+
+            // 边界检查
+            player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+
+            // AI移动：寻找最近的食物
+            let nearestFood = null;
+            let minDist = Infinity;
+            for (let food of foods) {
+                const dist = Math.hypot(ai.x - food.x, ai.y - food.y);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestFood = food;
+                }
+            }
+
+            if (nearestFood) {
+                const angle = Math.atan2(nearestFood.y - ai.y, nearestFood.x - ai.x);
+                ai.x += Math.cos(angle) * ai.speed * deltaTime;
+                ai.y += Math.sin(angle) * ai.speed * deltaTime;
+            }
+
+            // AI边界检查
+            ai.x = Math.max(ai.radius, Math.min(canvas.width - ai.radius, ai.x));
+            ai.y = Math.max(ai.radius, Math.min(canvas.height - ai.radius, ai.y));
+
+            // 玩家吃食物
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const food = foods[i];
+                const dist = Math.hypot(player.x - food.x, player.y - food.y);
+                if (dist < player.radius + food.radius) {
+                    foods.splice(i, 1);
+                    playerScore++;
+                    foods.push(createFood());
+                }
+            }
+
+            // AI吃食物
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const food = foods[i];
+                const dist = Math.hypot(ai.x - food.x, ai.y - food.y);
+                if (dist < ai.radius + food.radius) {
+                    foods.splice(i, 1);
+                    aiScore++;
+                    foods.push(createFood());
+                }
+            }
+
+            // 更新得分
+            player.score = playerScore;
+            ai.score = aiScore;
+
+            // 游戏结束条件：玩家或AI得分达到20
+            if (playerScore >= 20 || aiScore >= 20) {
+                gameState = 'gameover';
+                if (playerScore > highScore) {
+                    highScore = playerScore;
+                    localStorage.setItem('highScore', highScore);
+                }
+            }
+        }
+
+        // 游戏渲染
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // 绘制背景
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(1, '#16213e');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            if (gameState === 'menu') {
+                // 菜单界面
+                ctx.fillStyle = 'white';
+                ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('速度太快了', canvas.width / 2, canvas.height / 3);
+                ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+                ctx.fillText('按空格键开始游戏', canvas.width / 2, canvas.height / 2);
+                ctx.fillText('使用方向键或WASD控制', canvas.width / 2, canvas.height / 2 + 30);
+                ctx.fillText('AI自动吃食物', canvas.width / 2, canvas.height / 2 + 60);
+            } else if (gameState === 'playing' || gameState === 'paused') {
+                // 绘制食物
+                for (let food of foods) {
+                    ctx.beginPath();
+                    ctx.arc(food.x, food.y, food.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = food.color;
+                    ctx.fill();
+                    ctx.closePath();
+                }
+
+                // 绘制玩家
+                ctx.beginPath();
+                ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+                ctx.fillStyle = player.color;
+                ctx.fill();
+                ctx.closePath();
+
+                // 绘制AI
+                ctx.beginPath();
+                ctx.arc(ai.x, ai.y, ai.radius, 0, Math.PI * 2);
+                ctx.fillStyle = ai.color;
+                ctx.fill();
+                ctx.closePath();
+
+                // 绘制得分
+                ctx.fillStyle = 'white';
+                ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('玩家得分: ', canvas.width / 2 - 50, 30);
+                ctx.fillStyle = '#4fd1c5';
+                ctx.fillText(playerScore, canvas.width / 2 + 30, 30);
+
+                ctx.fillStyle = 'white';
+                ctx.fillText('AI得分: ', canvas.width / 2 - 50, 60);
+                ctx.fillStyle = '#ff6b6b';
+                ctx.fillText(aiScore, canvas.width / 2 + 30, 60);
+
+                ctx.fillStyle = 'white';
+                ctx.fillText('最高分: ', canvas.width / 2 - 50, 90);
+                ctx.fillStyle = '#4fd1c5';
+                ctx.fillText(highScore, canvas.width / 2 + 30, 90);
+
+                // 暂停界面
+                if (gameState === 'paused') {
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    ctx.fillStyle = 'white';
+                    ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('游戏暂停', canvas.width / 2, canvas.height / 2);
+                    ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+                    ctx.fillText('按P键继续', canvas.width / 2, canvas.height / 2 + 40);
+                }
+            } else if (gameState === 'gameover') {
+                // 游戏结束界面
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('游戏结束', canvas.width / 2, canvas.height / 3);
+                ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+                ctx.fillText(`玩家得分: ${playerScore}`, canvas.width / 2, canvas.height / 2);
+                ctx.fillText(`AI得分: ${aiScore}`, canvas.width / 2, canvas.height / 2 + 30);
+                ctx.fillText(`最高分: ${highScore}`, canvas.width / 2, canvas.height / 2 + 60);
+                ctx.fillText('按空格键返回菜单', canvas.width / 2, canvas.height / 2 + 100);
+            }
+        }
+
+        // 游戏循环
+        function gameLoop(currentTime) {
+            deltaTime = (currentTime - lastTime) / 1000;
+            lastTime = currentTime;
+
+            update(deltaTime);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 启动游戏
+        init();
+        lastTime = performance.now();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

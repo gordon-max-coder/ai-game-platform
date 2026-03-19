@@ -1,0 +1,24 @@
+{
+  "gameId": "game_1773822098585_brpruupms",
+  "createdAt": "2026-03-18T08:21:38.585Z",
+  "messages": [
+    {
+      "role": "user",
+      "content": "请创建一个完整的 HTML5 游戏。游戏描述：速度太快了，并且AI要自动吃食物。\n                    \n重要技术要求：\n1. 单个 HTML 文件\n2. 使用 Canvas API\n3. Canvas 尺寸必须为 360x640 像素（9:16 竖屏比例）\n4. 在 JavaScript 中设置：canvas.width = 360; canvas.height = 640;\n5. 在 CSS 中设置：canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; }\n6. 包含完整游戏循环\n7. 有得分系统\n8. 确保有趣可玩\n\n只返回 HTML 代码，不要其他说明。",
+      "timestamp": "2026-03-18T08:21:38.585Z"
+    },
+    {
+      "role": "assistant",
+      "content": "游戏已创建",
+      "timestamp": "2026-03-18T08:21:38.585Z"
+    }
+  ],
+  "modifications": [
+    {
+      "prompt": "请创建一个完整的 HTML5 游戏。游戏描述：速度太快了，并且AI要自动吃食物。\n                    \n重要技术要求：\n1. 单个 HTML 文件\n2. 使用 Canvas API\n3. Canvas 尺寸必须为 360x640 像素（9:16 竖屏比例）\n4. 在 JavaScript 中设置：canvas.width = 360; canvas.height = 640;\n5. 在 CSS 中设置：canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; }\n6. 包含完整游戏循环\n7. 有得分系统\n8. 确保有趣可玩\n\n只返回 HTML 代码，不要其他说明。",
+      "code": "",
+      "timestamp": "2026-03-18T08:21:38.585Z",
+      "model": "openrouter/hunter-alpha"
+    }
+  ]
+}

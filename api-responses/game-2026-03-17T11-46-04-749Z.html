@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Food Competition Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #0f0f1a;
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        canvas {
+            max-width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 360;
+        canvas.height = 640;
+
+        // 游戏状态
+        const GameState = {
+            MENU: 'menu',
+            PLAYING: 'playing',
+            PAUSED: 'paused',
+            GAMEOVER: 'gameover'
+        };
+
+        // 游戏变量
+        let currentState = GameState.MENU;
+        let playerScore = 0;
+        let aiScore = 0;
+        let highScore = parseInt(localStorage.getItem('highScore')) || 0;
+        let lastTime = 0;
+        let deltaTime = 0;
+
+        // 玩家对象
+        const player = {
+            x: 180,
+            y: 500,
+            size: 20,
+            speed: 200,
+            color: '#4fd1c5',
+            dx: 0,
+            dy: 0
+        };
+
+        // AI 对手对象
+        const ai = {
+            x: 180,
+            y: 140,
+            size: 20,
+            speed: 150,
+            color: '#ff6b6b',
+            dx: 0,
+            dy: 0
+        };
+
+        // 食物数组
+        let foods = [];
+        const foodSize = 10;
+        const maxFoods = 5;
+
+        // 输入状态
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false,
+            KeyW: false,
+            KeyS: false,
+            KeyA: false,
+            KeyD: false,
+            Space: false,
+            Escape: false
+        };
+
+        // 初始化食物
+        function initFoods() {
+            foods = [];
+            for (let i = 0; i < maxFoods; i++) {
+                spawnFood();
+            }
+        }
+
+        // 生成食物
+        function spawnFood() {
+            const food = {
+                x: Math.random() * (canvas.width - foodSize * 2) + foodSize,
+                y: Math.random() * (canvas.height - foodSize * 2) + foodSize,
+                size: foodSize,
+                color: '#ffd93d'
+            };
+            foods.push(food);
+        }
+
+        // 输入处理函数
+        function handleInput(key, pressed) {
+            if (key in keys) {
+                keys[key] = pressed;
+            }
+            if (pressed && key === 'Space') {
+                if (currentState === GameState.MENU) {
+                    currentState = GameState.PLAYING;
+                    resetGame();
+                } else if (currentState === GameState.PLAYING) {
+                    currentState = GameState.PAUSED;
+                } else if (currentState === GameState.PAUSED) {
+                    currentState = GameState.PLAYING;
+                } else if (currentState === GameState.GAMEOVER) {
+                    currentState = GameState.MENU;
+                }
+            }
+            if (pressed && key === 'Escape' && currentState === GameState.PLAYING) {
+                currentState = GameState.PAUSED;
+            }
+        }
+
+        // 重置游戏
+        function resetGame() {
+            playerScore = 0;
+            aiScore = 0;
+            player.x = 180;
+            player.y = 500;
+            ai.x = 180;
+            ai.y = 140;
+            initFoods();
+        }
+
+        // 更新玩家移动
+        function updatePlayer(deltaTime) {
+            player.dx = 0;
+            player.dy = 0;
+            if (keys.ArrowUp || keys.KeyW) player.dy = -1;
+            if (keys.ArrowDown || keys.KeyS) player.dy = 1;
+            if (keys.ArrowLeft || keys.KeyA) player.dx = -1;
+            if (keys.ArrowRight || keys.KeyD) player.dx = 1;
+
+            // 归一化方向向量
+            const length = Math.sqrt(player.dx * player.dx + player.dy * player.dy);
+            if (length > 0) {
+                player.dx /= length;
+                player.dy /= length;
+            }
+
+            player.x += player.dx * player.speed * deltaTime;
+            player.y += player.dy * player.speed * deltaTime;
+
+            // 边界检查
+            player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+            player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+        }
+
+        // 更新 AI 移动
+        function updateAI(deltaTime) {
+            if (foods.length === 0) return;
+
+            // 找到最近的食物
+            let nearestFood = foods[0];
+            let minDist = Infinity;
+            for (const food of foods) {
+                const dx = food.x - ai.x;
+                const dy = food.y - ai.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < minDist) {
+                    minDist = dist;
+                    nearestFood = food;
+                }
+            }
+
+            // 计算移动方向
+            const dx = nearestFood.x - ai.x;
+            const dy = nearestFood.y - ai.y;
+            const length = Math.sqrt(dx * dx + dy * dy);
+            if (length > 0) {
+                ai.dx = dx / length;
+                ai.dy = dy / length;
+            }
+
+            ai.x += ai.dx * ai.speed * deltaTime;
+            ai.y += ai.dy * ai.speed * deltaTime;
+
+            // 边界检查
+            ai.x = Math.max(ai.size, Math.min(canvas.width - ai.size, ai.x));
+            ai.y = Math.max(ai.size, Math.min(canvas.height - ai.size, ai.y));
+        }
+
+        // 检查碰撞
+        function checkCollisions() {
+            // 玩家与食物碰撞
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const food = foods[i];
+                const dx = player.x - food.x;
+                const dy = player.y - food.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < player.size + food.size) {
+                    playerScore++;
+                    foods.splice(i, 1);
+                    spawnFood();
+                }
+            }
+
+            // AI 与食物碰撞
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const food = foods[i];
+                const dx = ai.x - food.x;
+                const dy = ai.y - food.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < ai.size + food.size) {
+                    aiScore++;
+                    foods.splice(i, 1);
+                    spawnFood();
+                }
+            }
+
+            // 检查游戏结束条件（例如，得分达到 20）
+            if (playerScore >= 20 || aiScore >= 20) {
+                currentState = GameState.GAMEOVER;
+                if (playerScore > highScore) {
+                    highScore = playerScore;
+                    localStorage.setItem('highScore', highScore);
+                }
+            }
+        }
+
+        // 更新游戏逻辑
+        function update(deltaTime) {
+            if (currentState !== GameState.PLAYING) return;
+
+            updatePlayer(deltaTime);
+            updateAI(deltaTime);
+            checkCollisions();
+        }
+
+        // 绘制背景
+        function drawBackground() {
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#1a1a2e');
+            gradient.addColorStop(1, '#16213e');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        // 绘制得分
+        function drawScore() {
+            ctx.fillStyle = 'white';
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Player: ', canvas.width / 2 - 50, 30);
+            ctx.fillStyle = '#4fd1c5';
+            ctx.fillText(playerScore, canvas.width / 2 - 10, 30);
+            ctx.fillStyle = 'white';
+            ctx.fillText('AI: ', canvas.width / 2 + 30, 30);
+            ctx.fillStyle = '#ff6b6b';
+            ctx.fillText(aiScore, canvas.width / 2 + 60, 30);
+            ctx.fillStyle = 'white';
+            ctx.fillText('High: ' + highScore, canvas.width / 2, 60);
+        }
+
+        // 绘制角色
+        function drawCharacter(character) {
+            ctx.beginPath();
+            ctx.arc(character.x, character.y, character.size, 0, Math.PI * 2);
+            ctx.fillStyle = character.color;
+            ctx.fill();
+            ctx.strokeStyle = 'white';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // 绘制食物
+        function drawFoods() {
+            for (const food of foods) {
+                ctx.beginPath();
+                ctx.arc(food.x, food.y, food.size, 0, Math.PI * 2);
+                ctx.fillStyle = food.color;
+                ctx.fill();
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+        }
+
+        // 绘制菜单
+        function drawMenu() {
+            drawBackground();
+            ctx.fillStyle = 'white';
+            ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Food Competition', canvas.width / 2, canvas.height / 2 - 50);
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('Press SPACE to Start', canvas.width / 2, canvas.height / 2);
+            ctx.fillText('Use Arrow Keys or WASD to Move', canvas.width / 2, canvas.height / 2 + 40);
+            ctx.fillText('Compete with AI for Food!', canvas.width / 2, canvas.height / 2 + 80);
+        }
+
+        // 绘制暂停菜单
+        function drawPaused() {
+            drawBackground();
+            drawFoods();
+            drawCharacter(player);
+            drawCharacter(ai);
+            drawScore();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'white';
+            ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('PAUSED', canvas.width / 2, canvas.height / 2 - 20);
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('Press SPACE to Resume', canvas.width / 2, canvas.height / 2 + 20);
+        }
+
+        // 绘制游戏结束
+        function drawGameOver() {
+            drawBackground();
+            ctx.fillStyle = 'white';
+            ctx.font = '30px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 50);
+            ctx.font = '20px PingFang SC, Microsoft YaHei, sans-serif';
+            ctx.fillText('Player Score: ' + playerScore, canvas.width / 2, canvas.height / 2);
+            ctx.fillStyle = '#ff6b6b';
+            ctx.fillText('AI Score: ' + aiScore, canvas.width / 2, canvas.height / 2 + 30);
+            ctx.fillStyle = 'white';
+            ctx.fillText('High Score: ' + highScore, canvas.width / 2, canvas.height / 2 + 60);
+            ctx.fillText('Press SPACE to Continue', canvas.width / 2, canvas.height / 2 + 100);
+        }
+
+        // 渲染游戏
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            switch (currentState) {
+                case GameState.MENU:
+                    drawMenu();
+                    break;
+                case GameState.PLAYING:
+                    drawBackground();
+                    drawFoods();
+                    drawCharacter(player);
+                    drawCharacter(ai);
+                    drawScore();
+                    break;
+                case GameState.PAUSED:
+                    drawPaused();
+                    break;
+                case GameState.GAMEOVER:
+                    drawGameOver();
+                    break;
+            }
+        }
+
+        // 游戏循环
+        function gameLoop(timestamp) {
+            deltaTime = (timestamp - lastTime) / 1000;
+            lastTime = timestamp;
+
+            update(deltaTime);
+            render();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // 事件监听
+        document.addEventListener('keydown', (e) => {
+            handleInput(e.code, true);
+        });
+
+        document.addEventListener('keyup', (e) => {
+            handleInput(e.code, false);
+        });
+
+        // 初始化并开始游戏
+        initFoods();
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

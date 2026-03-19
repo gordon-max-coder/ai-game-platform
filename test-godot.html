@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Godot 导出测试</title>
+    <style>
+        body { font-family: Arial; padding: 20px; }
+        button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+        #result { margin-top: 20px; padding: 10px; border: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h1>🛠️ Godot 导出测试</h1>
+    <button onclick="testExport()">测试 Godot 导出</button>
+    <div id="result"></div>
+
+    <script>
+        async function testExport() {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = '⏳ 正在测试...';
+            
+            try {
+                const response = await fetch('http://localhost:3000/api/export-godot', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        htmlCode: '<html><body><canvas id="gameCanvas"></canvas></body></html>',
+                        gameTitle: '测试游戏',
+                        gameId: 'test_' + Date.now()
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    resultDiv.innerHTML = `
+                        <h3>✅ 导出成功！</h3>
+                        <p><strong>消息:</strong> ${data.message}</p>
+                        <p><strong>ZIP URL:</strong> ${data.zipUrl || 'N/A'}</p>
+                        <p><strong>文件列表:</strong> ${data.files?.join(', ') || 'N/A'}</p>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `
+                        <h3>❌ 导出失败</h3>
+                        <p><strong>状态:</strong> ${response.status}</p>
+                        <p><strong>错误:</strong> ${data.error || '未知错误'}</p>
+                    `;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `
+                    <h3>❌ 请求失败</h3>
+                    <p><strong>错误:</strong> ${error.message}</p>
+                    <p>请确保服务器已启动 (http://localhost:3000)</p>
+                `;
+            }
+        }
+    </script>
+</body>
+</html>

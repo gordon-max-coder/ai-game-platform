@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>测试参数提取正则</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .test-case {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+        }
+        .code {
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .result {
+            margin-top: 10px;
+            padding: 10px;
+            background: #e8f5e9;
+            border-radius: 4px;
+        }
+        .error {
+            background: #ffebee;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #4fd1c5;
+            color: white;
+            border: none;
+            border-radius: 4px;
+        }
+        button:hover {
+            background: #38b2ac;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 参数提取正则测试</h1>
+    
+    <button onclick="runTests()">运行测试</button>
+    
+    <div id="results"></div>
+
+    <script>
+        // 生命值提取正则（新版本）
+        const livesPatterns = [
+            // 对象字面量格式：hp: 5, maxHp: 5
+            /(?:^|[{,])\s*(?:player\.)?(?:hp|maxHp|health|maxHealth)\s*:\s*(\d+(?:\.\d+)?)/gim,
+            // 赋值格式：player.hp = 5
+            /(?:player|ship)\.(?:hp|maxHp|health)\s*=\s*(\d+(?:\.\d+)?)/gi,
+            // 变量格式：const maxLives = 5
+            /(?:lives|playerLives|maxLives)\s*=\s*(\d+)/gi,
+            /const\s+(?:max)?(?:Lives|PlayerLives|HP|Health|maxHp)\s*=\s*(\d+(?:\.\d+)?)/gi
+        ];
+
+        // 测试用例
+        const testCases = [
+            {
+                name: "飞机大战游戏（对象字面量）",
+                code: `const player = {
+  x: GAME_WIDTH / 2,
+  y: GAME_HEIGHT - 88,
+  hp: 5,
+  maxHp: 5,
+  invincibleTimer: 0
+};`,
+                expected: [5]
+            },
+            {
+                name: "RPG 游戏（赋值格式）",
+                code: `player.hp = 100;
+player.maxHp = 100;`,
+                expected: [100]
+            },
+            {
+                name: "射击游戏（飞船）",
+                code: `ship.hp = 50;
+ship.maxHp = 50;`,
+                expected: [50]
+            },
+            {
+                name: "平台跳跃（变量）",
+                code: `const maxLives = 3;
+let lives = 3;`,
+                expected: [3]
+            },
+            {
+                name: "混合格式",
+                code: `const player = {
+  hp: 5,
+  maxHp: 10
+};
+player.health = 50;
+const maxHealth = 100;`,
+                expected: [5, 10, 50, 100]
+            }
+        ];
+
+        function extractLives(code) {
+            const values = new Set();
+            
+            livesPatterns.forEach((pattern, index) => {
+                pattern.lastIndex = 0;
+                let match;
+                while ((match = pattern.exec(code)) !== null) {
+                    const value = parseFloat(match[1]);
+                    if (!isNaN(value)) {
+                        values.add(value);
+                        console.log(`模式 ${index + 1} 匹配到：${value}`);
+                    }
+                }
+            });
+            
+            return Array.from(values).sort((a, b) => a - b);
+        }
+
+        function runTests() {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = '';
+            
+            testCases.forEach((testCase, index) => {
+                const testDiv = document.createElement('div');
+                testDiv.className = 'test-case';
+                
+                const values = extractLives(testCase.code);
+                const passed = JSON.stringify(values) === JSON.stringify(testCase.expected);
+                
+                testDiv.innerHTML = `
+                    <h3>测试 ${index + 1}: ${testCase.name}</h3>
+                    <div class="code">${escapeHtml(testCase.code)}</div>
+                    <div class="result ${passed ? '' : 'error'}">
+                        <strong>提取结果:</strong> [${values.join(', ')}]<br>
+                        <strong>预期结果:</strong> [${testCase.expected.join(', ')}]<br>
+                        <strong>状态:</strong> ${passed ? '✅ 通过' : '❌ 失败'}
+                    </div>
+                `;
+                
+                resultsDiv.appendChild(testDiv);
+            });
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 自动运行一次
+        runTests();
+    </script>
+</body>
+</html>

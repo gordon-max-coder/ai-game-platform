@@ -1,0 +1,160 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>贪食蛇大作战</title>
+    <style>
+        body { margin: 0; background: #0f0f1a; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }
+        #game-container { position: relative; width: 360px; }
+        canvas { background: #1a1a2e; display: block; margin: 0 auto; border: 2px solid #333355; border-radius: 8px; }
+        .ui-layer { position: absolute; top: 0; left: 0; width: 360px; height: 640px; pointer-events: none; }
+        #controls { display: grid; grid-template-columns: repeat(3, 60px); gap: 10px; margin-top: 20px; }
+        .btn { width: 60px; height: 60px; background: #333355; border-radius: 50%; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }
+        .btn:active { background: #555588; }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    <div id="controls">
+        <div></div><div class="btn" onclick="setDir('UP')">▲</div><div></div>
+        <div class="btn" onclick="setDir('LEFT')">◀</div><div class="btn" onclick="setDir('DOWN')">▼</div><div class="btn" onclick="setDir('RIGHT')">▶</div>
+    </div>
+</div>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = 360;
+canvas.height = 640;
+
+const GRID = 20;
+const COLS = canvas.width / GRID;
+const ROWS = canvas.height / GRID;
+
+let snake = [{x: 9, y: 15}, {x: 8, y: 15}];
+let dir = {x: 1, y: 0};
+let food = {x: 15, y: 15, type: 'normal'};
+let score = 0;
+let highScore = localStorage.getItem('snakeHighScore') || 0;
+let gameState = 'START'; // START, PLAYING, PAUSED, GAMEOVER
+let speed = 8;
+let lastTime = 0;
+let particles = [];
+
+// 音频上下文
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playTone(freq, type, duration) {
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.start();
+    osc.stop(audioCtx.currentTime + duration);
+}
+
+function setDir(d) {
+    if (d === 'UP' && dir.y === 0) dir = {x: 0, y: -1};
+    if (d === 'DOWN' && dir.y === 0) dir = {x: 0, y: 1};
+    if (d === 'LEFT' && dir.x === 0) dir = {x: -1, y: 0};
+    if (d === 'RIGHT' && dir.x === 0) dir = {x: 1, y: 0};
+}
+
+function spawnFood() {
+    food.x = Math.floor(Math.random() * COLS);
+    food.y = Math.floor(Math.random() * ROWS);
+    food.type = Math.random() > 0.9 ? 'gold' : 'normal';
+}
+
+function update(time) {
+    if (gameState !== 'PLAYING') return;
+    
+    const deltaTime = time - lastTime;
+    if (deltaTime < 1000 / speed) return;
+    lastTime = time;
+
+    const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};
+
+    // 碰撞检测
+    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS || snake.some(s => s.x === head.x && s.y === head.y)) {
+        gameState = 'GAMEOVER';
+        playTone(100, 'sawtooth', 0.5);
+        if (score > highScore) { highScore = score; localStorage.setItem('snakeHighScore', highScore); }
+        return;
+    }
+
+    snake.unshift(head);
+    if (head.x === food.x && head.y === food.y) {
+        score += food.type === 'gold' ? 50 : 10;
+        if (score % 50 === 0) speed = Math.min(speed + 1, 15);
+        playTone(600, 'sine', 0.1);
+        spawnFood();
+    } else {
+        snake.pop();
+    }
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // 背景网格
+    ctx.strokeStyle = '#333355';
+    for(let i=0; i<COLS; i++) { ctx.beginPath(); ctx.moveTo(i*GRID, 0); ctx.lineTo(i*GRID, canvas.height); ctx.stroke(); }
+    for(let i=0; i<ROWS; i++) { ctx.beginPath(); ctx.moveTo(0, i*GRID); ctx.lineTo(canvas.width, i*GRID); ctx.stroke(); }
+
+    // 绘制蛇
+    snake.forEach((s, i) => {
+        ctx.fillStyle = i === 0 ? '#2ecc71' : '#27ae60';
+        ctx.fillRect(s.x*GRID + 2, s.y*GRID + 2, GRID-4, GRID-4);
+        if (i === 0) {
+            ctx.fillStyle = 'white';
+            ctx.fillRect(s.x*GRID + 5, s.y*GRID + 5, 4, 4);
+            ctx.fillRect(s.x*GRID + 12, s.y*GRID + 5, 4, 4);
+        }
+    });
+
+    // 绘制食物
+    ctx.fillStyle = food.type === 'gold' ? '#f1c40f' : '#e74c3c';
+    ctx.beginPath();
+    ctx.arc(food.x*GRID + GRID/2, food.y*GRID + GRID/2, GRID/3, 0, Math.PI*2);
+    ctx.fill();
+
+    // UI
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    ctx.fillRect(10, 10, 120, 60);
+    ctx.fillStyle = 'white';
+    ctx.font = '16px Arial';
+    ctx.fillText(`Score: ${score}`, 20, 35);
+    ctx.fillText(`Best: ${highScore}`, 20, 55);
+
+    if (gameState === 'START') {
+        ctx.fillStyle = 'white';
+        ctx.fillText("按空格键开始", 130, 320);
+    }
+}
+
+function loop(time) {
+    update(time);
+    draw();
+    requestAnimationFrame(loop);
+}
+
+window.addEventListener('keydown', e => {
+    if (e.code === 'Space') gameState = 'PLAYING';
+    if (e.code === 'ArrowUp') setDir('UP');
+    if (e.code === 'ArrowDown') setDir('DOWN');
+    if (e.code === 'ArrowLeft') setDir('LEFT');
+    if (e.code === 'ArrowRight') setDir('RIGHT');
+});
+
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

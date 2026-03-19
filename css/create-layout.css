@@ -44,7 +44,7 @@
     margin: 0 auto;
 }
 
-/* 编辑模式：三栏布局 */
+/* 编辑模式：三栏布局 - 调整比例为 1:1.5:1 (预览区更大) */
 .create-workspace.edit-mode {
     display: flex;
 }
@@ -56,6 +56,10 @@
 
 .create-workspace.edit-mode .conversation-history {
     max-width: none;
+}
+
+.create-workspace.edit-mode .preview-section {
+    flex: 1.5;  /* 预览区占据更大空间 */
 }
 
 /* ==================== 左侧对话区（1/3） ==================== */
@@ -71,14 +75,42 @@
 /* 对话历史区（4/5） */
 .conversation-history {
     flex: 4;
-    overflow-y: auto;
+    overflow-y: auto;  /* 始终显示垂直滚动条 */
+    overflow-x: hidden;
     padding: 1.5rem;
     background: #0f0f1a;
+    /* 确保滚动条可见 */
+    scrollbar-width: thin;
+    scrollbar-color: #4a4a6a #0f0f1a;
+}
+
+/* Webkit 浏览器滚动条样式 */
+.conversation-history::-webkit-scrollbar {
+    width: 8px;
+}
+
+.conversation-history::-webkit-scrollbar-track {
+    background: #0f0f1a;
+    border-radius: 4px;
+}
+
+.conversation-history::-webkit-scrollbar-thumb {
+    background: #4a4a6a;
+    border-radius: 4px;
+}
+
+.conversation-history::-webkit-scrollbar-thumb:hover {
+    background: #6366f1;
 }
 
 .conversation-messages {
     max-width: 900px;
     margin: 0 auto;
+    /* 确保内容能正确扩展 */
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;  /* 消息之间的间距 */
 }
 
 /* 欢迎消息 */
@@ -287,14 +319,18 @@
     padding: 0 0.5rem;
 }
 
-/* ==================== 中间预览区（1/3） ==================== */
+/* ==================== 中间预览区（更大） ==================== */
 .preview-section {
-    flex: 1;
     display: flex;
     flex-direction: column;
     background: #1a1a2e;
     min-width: 0;
     border-right: 1px solid #2d2d44;
+}
+
+/* 编辑模式下预览区更大 */
+.create-workspace.edit-mode .preview-section {
+    flex: 1.5;
 }
 
 /* ==================== 右侧数值面板（1/3） ==================== */
@@ -470,32 +506,29 @@
 .preview-content {
     flex: 1;
     position: relative;
-    overflow: hidden;
+    overflow: visible;
     display: flex;
     align-items: center;
     justify-content: center;
     background: #0f0f1a;
+    min-height: 600px;  /* 确保最小高度 */
 }
 
-/* 游戏容器 - 保持 9:16 比例 */
+/* 游戏容器 - 自适应尺寸 */
 .game-container {
     width: 100%;
     height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1rem;
+    padding: 0.5rem;
 }
 
-/* 游戏画布包装器 - 保持 9:16 比例 */
+/* 游戏画布包装器 - 自适应比例，优先宽度 */
 .game-canvas-wrapper {
     position: relative;
-    max-width: 100%;
-    max-height: 100%;
-    aspect-ratio: 9 / 16;
-    width: auto;
-    height: auto;
-    max-height: 100%;
+    width: 95%;
+    height: 95%;
     background: #000;
     border-radius: 8px;
     overflow: hidden;
@@ -807,3 +840,222 @@
 .btn-inspire:active {
     transform: translateY(0);
 }
+
+/* ==================== 模型选择器样式 ==================== */
+.model-selector {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: #1a1a2e;
+    border: 1px solid #2d2d44;
+    border-radius: 12px;
+    transition: border-color 0.2s ease;
+}
+
+.model-selector:hover {
+    border-color: #6366f1;
+}
+
+.model-label {
+    display: block;
+    color: #a0a0b0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-bottom: 0.8rem;
+}
+
+.model-select {
+    width: 100%;
+    padding: 0.8rem 1rem;
+    background: #0f0f1a;
+    border: 1px solid #2d2d44;
+    border-radius: 8px;
+    color: white;
+    font-size: 0.95rem;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    outline: none;
+}
+
+.model-select:focus {
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.model-select option {
+    background: #0f0f1a;
+    color: white;
+    padding: 0.8rem;
+}
+
+.model-hint {
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+    color: #6b6b7b;
+}
+
+/* ==================== API 状态栏 ==================== */
+.api-status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.8rem 1.5rem;
+    background: #0f0f1a;
+    border-bottom: 1px solid #2d2d44;
+}
+
+.api-status-info {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+}
+
+.api-provider-badge {
+    padding: 0.3rem 0.8rem;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.api-model-name {
+    color: #a0a0b0;
+    font-size: 0.9rem;
+}
+
+.btn-api-switch {
+    padding: 0.4rem 0.8rem;
+    background: #252542;
+    border: 1px solid #2d2d44;
+    border-radius: 8px;
+    color: white;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-api-switch:hover {
+    background: #6366f1;
+    border-color: #6366f1;
+    transform: rotate(90deg);
+}
+
+/* ==================== API 切换模态框 ==================== */
+.api-provider-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    padding: 1.5rem;
+}
+
+.api-provider-item {
+    background: #0f0f1a;
+    border: 1px solid #2d2d44;
+    border-radius: 12px;
+    overflow: hidden;
+    transition: border-color 0.2s ease;
+}
+
+.api-provider-item:hover {
+    border-color: #6366f1;
+}
+
+.api-provider-item.active {
+    border-color: #6366f1;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+}
+
+.provider-info {
+    padding: 1rem 1.5rem;
+    background: #1a1a2e;
+    border-bottom: 1px solid #2d2d44;
+}
+
+.provider-info h4 {
+    color: white;
+    font-size: 1.1rem;
+    margin: 0 0 0.3rem 0;
+}
+
+.provider-info p {
+    color: #6b6b7b;
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+.provider-models {
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.model-btn {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.8rem 1rem;
+    background: #252542;
+    border: 1px solid #2d2d44;
+    border-radius: 8px;
+    color: white;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.model-btn:hover {
+    background: #2d2d44;
+    border-color: #6366f1;
+}
+
+.model-btn.active {
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(139, 92, 246, 0.2) 100%);
+    border-color: #6366f1;
+}
+
+.model-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.model-cost {
+    color: #6b6b7b;
+    font-size: 0.85rem;
+}
+
+.api-switch-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #2d2d44;
+    background: #1a1a2e;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.btn-confirm {
+    padding: 0.8rem 2rem;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-confirm:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.btn-confirm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+/* ==================== 智能体样式（已移除，保留供参考） ==================== */
+/* 提示词智能体功能已在 v17 版本移除，恢复简洁输入流程 */
+/* 相关样式保留但不使用，如需完全删除可移除以下所有 .agent-* 样式 */

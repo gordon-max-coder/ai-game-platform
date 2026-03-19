@@ -1,0 +1,765 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>双AI穿墙贪吃蛇</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #111827;
+    color: #fff;
+    font-family: Arial, Helvetica, sans-serif;
+    overflow: hidden;
+  }
+  .wrap {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 8px;
+  }
+  canvas {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+    background: linear-gradient(180deg, #0b1220, #0f172a);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.08), 0 10px 30px rgba(0,0,0,0.4);
+    border-radius: 12px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <canvas id="game"></canvas>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+canvas.width = 360;
+canvas.height = 640;
+
+// ====== 基础配置 ======
+const CELL = 20;
+const COLS = canvas.width / CELL;   // 18
+const ROWS = canvas.height / CELL;  // 32
+
+let gameState = "start"; // start, playing, over
+let lastTime = 0;
+let moveTimer = 0;
+let baseStep = 135;
+let currentStep = baseStep;
+let particles = [];
+let foods = [];
+let frame = 0;
+
+// ====== 工具 ======
+function randInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+function wrap(v, max) {
+  if (v < 0) return max - 1;
+  if (v >= max) return 0;
+  return v;
+}
+function key(x, y) {
+  return `${x},${y}`;
+}
+function samePos(a, b) {
+  return a.x === b.x && a.y === b.y;
+}
+function manhattanWrap(ax, ay, bx, by) {
+  const dx = Math.abs(ax - bx);
+  const dy = Math.abs(ay - by);
+  return Math.min(dx, COLS - dx) + Math.min(dy, ROWS - dy);
+}
+function directionName(dx, dy) {
+  if (dx === 1) return "right";
+  if (dx === -1) return "left";
+  if (dy === 1) return "down";
+  return "up";
+}
+function dirToDelta(dir) {
+  switch (dir) {
+    case "up": return {x:0,y:-1};
+    case "down": return {x:0,y:1};
+    case "left": return {x:-1,y:0};
+    case "right": return {x:1,y:0};
+  }
+}
+function isOpposite(a, b) {
+  return (a === "up" && b === "down") ||
+         (a === "down" && b === "up") ||
+         (a === "left" && b === "right") ||
+         (a === "right" && b === "left");
+}
+
+// ====== 蛇 ======
+function createSnake(name, color, headColor, x, y, dir, ai = false, personality = "smart") {
+  const d = dirToDelta(dir);
+  return {
+    name,
+    color,
+    headColor,
+    body: [
+      {x, y},
+      {x: wrap(x - d.x, COLS), y: wrap(y - d.y, ROWS)},
+      {x: wrap(x - d.x * 2, COLS), y: wrap(y - d.y * 2, ROWS)}
+    ],
+    dir,
+    nextDir: dir,
+    alive: true,
+    ai,
+    personality,
+    score: 0,
+    boostFrames: 0,
+    flash: 0
+  };
+}
+
+let player, ai1, ai2;
+
+function resetGame() {
+  player = createSnake("你", "#22c55e", "#86efac", 4, 8, "right", false);
+  ai1 = createSnake("AI-赤", "#ef4444", "#fca5a5", 13, 12, "left", true, "aggressive");
+  ai2 = createSnake("AI-蓝", "#3b82f6", "#93c5fd", 9, 24, "up", true, "safe");
+
+  foods = [];
+  particles = [];
+  spawnFood("normal");
+  spawnFood("normal");
+  spawnFood("gold");
+  gameState = "start";
+  moveTimer = 0;
+  currentStep = baseStep;
+  frame = 0;
+}
+
+function allSnakes() {
+  return [player, ai1, ai2];
+}
+
+function occupiedMap(ignoreTailSnakes = []) {
+  const set = new Set();
+  for (const s of allSnakes()) {
+    if (!s.alive) continue;
+    for (let i = 0; i < s.body.length; i++) {
+      if (ignoreTailSnakes.includes(s) && i === s.body.length - 1) continue;
+      set.add(key(s.body[i].x, s.body[i].y));
+    }
+  }
+  return set;
+}
+
+// ====== 食物 ======
+function spawnFood(type = "normal") {
+  const blocked = occupiedMap();
+  for (let tries = 0; tries < 500; tries++) {
+    const p = { x: randInt(0, COLS - 1), y: randInt(0, ROWS - 1) };
+    if (blocked.has(key(p.x, p.y))) continue;
+    if (foods.some(f => samePos(f, p))) continue;
+
+    let food;
+    if (type === "gold") {
+      food = { ...p, type: "gold", value: 3, color: "#fbbf24", pulse: Math.random() * Math.PI * 2 };
+    } else if (type === "speed") {
+      food = { ...p, type: "speed", value: 2, color: "#a855f7", pulse: Math.random() * Math.PI * 2 };
+    } else {
+      food = { ...p, type: "normal", value: 1, color: "#fb7185", pulse: Math.random() * Math.PI * 2 };
+    }
+    foods.push(food);
+    return;
+  }
+}
+
+// ====== 输入 ======
+window.addEventListener("keydown", (e) => {
+  const k = e.key.toLowerCase();
+
+  if (k === " " || k === "enter") {
+    if (gameState === "start") {
+      gameState = "playing";
+    } else if (gameState === "over") {
+      resetGame();
+      gameState = "playing";
+    }
+    e.preventDefault();
+    return;
+  }
+
+  if (gameState !== "playing") return;
+
+  if (k === "arrowup" || k === "w") setPlayerDir("up");
+  else if (k === "arrowdown" || k === "s") setPlayerDir("down");
+  else if (k === "arrowleft" || k === "a") setPlayerDir("left");
+  else if (k === "arrowright" || k === "d") setPlayerDir("right");
+});
+
+let touchStartX = 0;
+let touchStartY = 0;
+canvas.addEventListener("touchstart", (e) => {
+  const t = e.touches[0];
+  touchStartX = t.clientX;
+  touchStartY = t.clientY;
+}, {passive:true});
+
+canvas.addEventListener("touchend", (e) => {
+  if (gameState === "start") {
+    gameState = "playing";
+    return;
+  }
+  if (gameState === "over") {
+    resetGame();
+    gameState = "playing";
+    return;
+  }
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStartX;
+  const dy = t.clientY - touchStartY;
+  if (Math.abs(dx) < 12 && Math.abs(dy) < 12) return;
+
+  if (Math.abs(dx) > Math.abs(dy)) {
+    setPlayerDir(dx > 0 ? "right" : "left");
+  } else {
+    setPlayerDir(dy > 0 ? "down" : "up");
+  }
+}, {passive:true});
+
+function setPlayerDir(dir) {
+  if (!isOpposite(player.dir, dir)) player.nextDir = dir;
+}
+
+// ====== AI ======
+function chooseAiDirection(snake) {
+  if (!snake.alive) return snake.dir;
+
+  const dirs = ["up", "down", "left", "right"].filter(d => !isOpposite(snake.dir, d));
+  const foodTargets = [...foods];
+
+  let best = null;
+  for (const d of dirs) {
+    const dd = dirToDelta(d);
+    const nx = wrap(snake.body[0].x + dd.x, COLS);
+    const ny = wrap(snake.body[0].y + dd.y, ROWS);
+
+    let danger = cellDanger(nx, ny, snake, d);
+    let targetDist = 999;
+    let targetValue = 0;
+
+    for (const f of foodTargets) {
+      const dist = manhattanWrap(nx, ny, f.x, f.y);
+      const desirability = dist - f.value * 1.4 - (f.type === "speed" ? 0.8 : 0) - (f.type === "gold" ? 1.2 : 0);
+      if (desirability < targetDist) {
+        targetDist = desirability;
+        targetValue = f.value;
+      }
+    }
+
+    const space = floodFreeEstimate(nx, ny, snake, 28);
+    let score = 0;
+
+    if (snake.personality === "aggressive") {
+      score = -danger * 100 - targetDist * 5 + space * 0.8 + targetValue * 2;
+      score += huntBonus(nx, ny, snake) * 2.4;
+    } else {
+      score = -danger * 120 - targetDist * 3.8 + space * 1.4 + targetValue * 1.2;
+      score += huntBonus(nx, ny, snake) * 1.0;
+    }
+
+    if (!best || score > best.score) {
+      best = { dir: d, score };
+    }
+  }
+
+  if (!best) return snake.dir;
+  return best.dir;
+}
+
+function huntBonus(nx, ny, snake) {
+  let bonus = 0;
+  for (const other of allSnakes()) {
+    if (other === snake || !other.alive) continue;
+    const h = other.body[0];
+    const dist = manhattanWrap(nx, ny, h.x, h.y);
+    if (dist <= 2 && snake.body.length >= other.body.length) bonus += 2.5;
+    if (dist <= 1 && snake.body.length > other.body.length) bonus += 4;
+  }
+  return bonus;
+}
+
+function cellDanger(x, y, me, moveDir) {
+  let danger = 0;
+
+  // 撞到任何身体都危险
+  for (const s of allSnakes()) {
+    if (!s.alive) continue;
+    for (let i = 0; i < s.body.length; i++) {
+      if (s === me && i === s.body.length - 1) continue; // 自己尾巴可能移动
+      if (x === s.body[i].x && y === s.body[i].y) danger += 10;
+    }
+  }
+
+  // 靠近别的头增加风险
+  for (const s of allSnakes()) {
+    if (s === me || !s.alive) continue;
+    const h = s.body[0];
+    const d = manhattanWrap(x, y, h.x, h.y);
+    if (d === 0) {
+      if (me.body.length <= s.body.length) danger += 20;
+      else danger -= 4;
+    } else if (d === 1) {
+      danger += me.body.length <= s.body.length ? 5 : 1;
+    }
+  }
+
+  // 避免死胡同
+  let exits = 0;
+  for (const d of ["up","down","left","right"]) {
+    if (isOpposite(moveDir, d)) continue;
+    const dd = dirToDelta(d);
+    const tx = wrap(x + dd.x, COLS);
+    const ty = wrap(y + dd.y, ROWS);
+    let blocked = false;
+    for (const s of allSnakes()) {
+      if (!s.alive) continue;
+      for (let i = 0; i < s.body.length; i++) {
+        if (s === me && i === s.body.length - 1) continue;
+        if (s.body[i].x === tx && s.body[i].y === ty) blocked = true;
+      }
+    }
+    if (!blocked) exits++;
+  }
+  if (exits <= 1) danger += 4;
+  return danger;
+}
+
+function floodFreeEstimate(sx, sy, me, limit = 30) {
+  const blocked = occupiedMap([me]);
+  const startK = key(sx, sy);
+  blocked.delete(startK);
+
+  const q = [{x:sx,y:sy}];
+  const seen = new Set([startK]);
+  let count = 0;
+
+  while (q.length && count < limit) {
+    const p = q.shift();
+    count++;
+    const ns = [
+      {x:wrap(p.x+1,COLS),y:p.y},
+      {x:wrap(p.x-1,COLS),y:p.y},
+      {x:p.x,y:wrap(p.y+1,ROWS)},
+      {x:p.x,y:wrap(p.y-1,ROWS)},
+    ];
+    for (const n of ns) {
+      const k = key(n.x,n.y);
+      if (seen.has(k) || blocked.has(k)) continue;
+      seen.add(k);
+      q.push(n);
+    }
+  }
+  return count;
+}
+
+// ====== 更新 ======
+function update(dt) {
+  frame++;
+  for (const f of foods) f.pulse += dt * 0.006;
+
+  particles = particles.filter(p => {
+    p.x += p.vx * dt * 0.06;
+    p.y += p.vy * dt * 0.06;
+    p.life -= dt;
+    p.vx *= 0.99;
+    p.vy *= 0.99;
+    return p.life > 0;
+  });
+
+  if (gameState !== "playing") return;
+
+  currentStep = Math.max(75, baseStep - (player.score + ai1.score + ai2.score) * 1.5);
+  moveTimer += dt;
+
+  while (moveTimer >= currentStep) {
+    moveTimer -= currentStep;
+    stepGame();
+  }
+}
+
+function stepGame() {
+  if (!player.alive && !ai1.alive && !ai2.alive) {
+    gameState = "over";
+    return;
+  }
+
+  if (ai1.alive) ai1.nextDir = chooseAiDirection(ai1);
+  if (ai2.alive) ai2.nextDir = chooseAiDirection(ai2);
+
+  for (const s of allSnakes()) {
+    if (!s.alive) continue;
+    if (!isOpposite(s.dir, s.nextDir)) s.dir = s.nextDir;
+  }
+
+  const intents = [];
+  for (const s of allSnakes()) {
+    if (!s.alive) continue;
+    const d = dirToDelta(s.dir);
+    const nx = wrap(s.body[0].x + d.x, COLS);
+    const ny = wrap(s.body[0].y + d.y, ROWS);
+    intents.push({ snake: s, x: nx, y: ny, grow: 0, ateFood: null });
+  }
+
+  // 先判定吃食物
+  for (const it of intents) {
+    const idx = foods.findIndex(f => f.x === it.x && f.y === it.y);
+    if (idx >= 0) {
+      const food = foods[idx];
+      it.grow = food.value;
+      it.ateFood = food;
+      foods.splice(idx, 1);
+      spawnFood(Math.random() < 0.18 ? "speed" : (Math.random() < 0.3 ? "gold" : "normal"));
+    }
+  }
+
+  // 构建占位，用于身体碰撞
+  const bodyMap = new Map();
+  for (const s of allSnakes()) {
+    if (!s.alive) continue;
+    const willGrow = intents.find(it => it.snake === s)?.grow > 0;
+    const len = s.body.length - (willGrow ? 0 : 1); // 不长时尾巴会离开
+    for (let i = 0; i < len; i++) {
+      bodyMap.set(key(s.body[i].x, s.body[i].y), s);
+    }
+  }
+
+  // 身体碰撞
+  for (const it of intents) {
+    if (!it.snake.alive) continue;
+    if (bodyMap.has(key(it.x, it.y))) {
+      it.snake.alive = false;
+      explodeSnake(it.snake);
+    }
+  }
+
+  // 头对头碰撞
+  for (let i = 0; i < intents.length; i++) {
+    for (let j = i + 1; j < intents.length; j++) {
+      const a = intents[i], b = intents[j];
+      if (!a.snake.alive || !b.snake.alive) continue;
+      if (a.x === b.x && a.y === b.y) {
+        const al = a.snake.body.length + a.grow;
+        const bl = b.snake.body.length + b.grow;
+        if (al > bl) {
+          b.snake.alive = false;
+          explodeSnake(b.snake);
+          a.snake.score += 2;
+          a.snake.flash = 8;
+        } else if (bl > al) {
+          a.snake.alive = false;
+          explodeSnake(a.snake);
+          b.snake.score += 2;
+          b.snake.flash = 8;
+        } else {
+          a.snake.alive = false;
+          b.snake.alive = false;
+          explodeSnake(a.snake);
+          explodeSnake(b.snake);
+        }
+      }
+    }
+  }
+
+  // 应用移动
+  for (const it of intents) {
+    const s = it.snake;
+    if (!s.alive) continue;
+
+    s.body.unshift({x: it.x, y: it.y});
+
+    if (it.grow > 0) {
+      s.score += it.grow;
+      s.flash = 8;
+      if (it.ateFood && it.ateFood.type === "speed") {
+        s.boostFrames += 8;
+      }
+      burst(it.x, it.y, it.ateFood?.color || "#fff", 10);
+      for (let i = 0; i < it.grow; i++) s.body.push({...s.body[s.body.length - 1]});
+    }
+
+    s.body.pop();
+
+    if (s.boostFrames > 0) s.boostFrames--;
+    if (s.flash > 0) s.flash--;
+  }
+
+  // 维持食物数量
+  while (foods.length < 3) {
+    const r = Math.random();
+    spawnFood(r < 0.18 ? "speed" : r < 0.35 ? "gold" : "normal");
+  }
+
+  const aliveCount = allSnakes().filter(s => s.alive).length;
+  if (aliveCount <= 0 || !player.alive) {
+    gameState = "over";
+  }
+}
+
+function explodeSnake(snake) {
+  for (const seg of snake.body) {
+    burst(seg.x, seg.y, snake.color, 3);
+  }
+}
+
+function burst(cx, cy, color, n) {
+  const px = cx * CELL + CELL / 2;
+  const py = cy * CELL + CELL / 2;
+  for (let i = 0; i < n; i++) {
+    particles.push({
+      x: px,
+      y: py,
+      vx: (Math.random() - 0.5) * 5,
+      vy: (Math.random() - 0.5) * 5,
+      life: randInt(250, 600),
+      color
+    });
+  }
+}
+
+// ====== 绘制 ======
+function draw() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // 背景网格
+  drawGrid();
+
+  // 食物
+  for (const f of foods) drawFood(f);
+
+  // 粒子
+  for (const p of particles) {
+    ctx.globalAlpha = Math.max(0, p.life / 600);
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 2.3, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // 蛇
+  drawSnake(player);
+  drawSnake(ai1);
+  drawSnake(ai2);
+
+  // HUD
+  drawHUD();
+
+  if (gameState === "start") drawOverlay("双AI穿墙贪吃蛇", "你 vs 两个AI\n方向键/WASD 或滑动控制\n所有蛇都可以穿墙\n吃食物得分，撞身体会出局\n头对头时更长的蛇获胜\n按 空格/回车/点击开始");
+  if (gameState === "over") {
+    let winner = allSnakes().slice().sort((a,b)=>b.score-a.score)[0];
+    let text = `最终得分\n你:${player.score}  赤:${ai1.score}  蓝:${ai2.score}\n最高分: ${winner.name}\n按 空格/回车/点击重开`;
+    drawOverlay(player.alive ? "你赢了！" : "游戏结束", text);
+  }
+}
+
+function drawGrid() {
+  ctx.save();
+  ctx.globalAlpha = 0.12;
+  ctx.strokeStyle = "#94a3b8";
+  ctx.lineWidth = 1;
+  for (let x = 0; x <= COLS; x++) {
+    ctx.beginPath();
+    ctx.moveTo(x * CELL + 0.5, 0);
+    ctx.lineTo(x * CELL + 0.5, canvas.height);
+    ctx.stroke();
+  }
+  for (let y = 0; y <= ROWS; y++) {
+    ctx.beginPath();
+    ctx.moveTo(0, y * CELL + 0.5);
+    ctx.lineTo(canvas.width, y * CELL + 0.5);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawFood(f) {
+  const x = f.x * CELL + CELL / 2;
+  const y = f.y * CELL + CELL / 2;
+  const pulse = 1 + Math.sin(f.pulse) * 0.12;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.scale(pulse, pulse);
+
+  if (f.type === "gold") {
+    ctx.fillStyle = "#fde68a";
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const r = i % 2 === 0 ? 8 : 4;
+      const a = -Math.PI / 2 + i * Math.PI / 5;
+      const px = Math.cos(a) * r;
+      const py = Math.sin(a) * r;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = f.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (f.type === "speed") {
+    ctx.fillStyle = f.color;
+    ctx.beginPath();
+    ctx.moveTo(-4, -8);
+    ctx.lineTo(3, -2);
+    ctx.lineTo(-1, -2);
+    ctx.lineTo(4, 8);
+    ctx.lineTo(-3, 2);
+    ctx.lineTo(1, 2);
+    ctx.closePath();
+    ctx.fill();
+  } else {
+    ctx.fillStyle = f.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#fff";
+    ctx.globalAlpha = 0.4;
+    ctx.beginPath();
+    ctx.arc(-2, -2, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawSnake(s) {
+  if (!s.alive) return;
+
+  for (let i = s.body.length - 1; i >= 0; i--) {
+    const seg = s.body[i];
+    const x = seg.x * CELL;
+    const y = seg.y * CELL;
+    const isHead = i === 0;
+    const radius = isHead ? 7 : 6;
+
+    ctx.save();
+    if (s.flash > 0 && i < 2) {
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = "#fff";
+    }
+    ctx.fillStyle = isHead ? s.headColor : s.color;
+    roundRect(ctx, x + 1.5, y + 1.5, CELL - 3, CELL - 3, radius);
+    ctx.fill();
+
+    if (isHead) {
+      const centerX = x + CELL / 2;
+      const centerY = y + CELL / 2;
+      let eye1x = centerX - 4, eye1y = centerY - 4;
+      let eye2x = centerX + 4, eye2y = centerY - 4;
+
+      if (s.dir === "down") { eye1y = centerY + 1; eye2y = centerY + 1; }
+      if (s.dir === "left") { eye1x = centerX - 3; eye2x = centerX - 3; eye1y = centerY - 4; eye2y = centerY + 4; }
+      if (s.dir === "right"){ eye1x = centerX + 3; eye2x = centerX + 3; eye1y = centerY - 4; eye2y = centerY + 4; }
+
+      ctx.fillStyle = "#0f172a";
+      ctx.beginPath();
+      ctx.arc(eye1x, eye1y, 1.8, 0, Math.PI * 2);
+      ctx.arc(eye2x, eye2y, 1.8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function drawHUD() {
+  ctx.save();
+  ctx.fillStyle = "rgba(15,23,42,0.72)";
+  roundRect(ctx, 8, 8, 344, 74, 12);
+  ctx.fill();
+
+  ctx.font = "bold 16px Arial";
+  ctx.fillStyle = "#e5e7eb";
+  ctx.fillText("双AI穿墙贪吃蛇", 18, 30);
+
+  ctx.font = "14px Arial";
+  ctx.fillStyle = player.alive ? "#86efac" : "#4b5563";
+  ctx.fillText(`你: ${player.score}`, 18, 55);
+
+  ctx.fillStyle = ai1.alive ? "#fca5a5" : "#4b5563";
+  ctx.fillText(`AI-赤: ${ai1.score}`, 118, 55);
+
+  ctx.fillStyle = ai2.alive ? "#93c5fd" : "#4b5563";
+  ctx.fillText(`AI-蓝: ${ai2.score}`, 235, 55);
+
+  ctx.font = "12px Arial";
+  ctx.fillStyle = "#cbd5e1";
+  ctx.fillText("紫色=加速成长  黄色=高分  可穿墙", 18, 73);
+  ctx.restore();
+}
+
+function drawOverlay(title, text) {
+  ctx.save();
+  ctx.fillStyle = "rgba(2, 6, 23, 0.72)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  ctx.fillStyle = "rgba(15, 23, 42, 0.92)";
+  roundRect(ctx, 26, 180, 308, 240, 18);
+  ctx.fill();
+
+  ctx.strokeStyle = "rgba(255,255,255,0.12)";
+  ctx.lineWidth = 2;
+  roundRect(ctx, 26, 180, 308, 240, 18);
+  ctx.stroke();
+
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fff";
+  ctx.font = "bold 26px Arial";
+  ctx.fillText(title, canvas.width / 2, 225);
+
+  ctx.font = "15px Arial";
+  ctx.fillStyle = "#d1d5db";
+  const lines = text.split("\n");
+  lines.forEach((line, i) => {
+    ctx.fillText(line, canvas.width / 2, 270 + i * 26);
+  });
+
+  ctx.font = "12px Arial";
+  ctx.fillStyle = "#94a3b8";
+  ctx.fillText("目标：活得更久，拿更高分", canvas.width / 2, 392);
+  ctx.textAlign = "start";
+  ctx.restore();
+}
+
+// ====== 主循环 ======
+function loop(ts) {
+  if (!lastTime) lastTime = ts;
+  const dt = Math.min(32, ts - lastTime);
+  lastTime = ts;
+
+  update(dt);
+  draw();
+
+  requestAnimationFrame(loop);
+}
+
+// 启动
+resetGame();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

@@ -1,0 +1,79 @@
+{
+  "timestamp": "2026-03-11T12:48:10.451Z",
+  "provider": "jiekou",
+  "model": "gemini-3.1-flash-lite-preview",
+  "prompt": "你是专业的游戏开发 AI 助手。",
+  "gameCode": "```html\n<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">\n    <title>贪食蛇大作战</title>\n    <style>\n        body { margin: 0; background: #0f0f1a; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }\n        #game-container { position: relative; width: 360px; }\n        canvas { background: #1a1a2e; display: block; margin: 0 auto; border: 2px solid #333355; border-radius: 8px; }\n        .ui-layer { position: absolute; top: 0; left: 0; width: 360px; height: 640px; pointer-events: none; }\n        #controls { display: grid; grid-template-columns: repeat(3, 60px); gap: 10px; margin-top: 20px; }\n        .btn { width: 60px; height: 60px; background: #333355; border-radius: 50%; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }\n        .btn:active { background: #555588; }\n    </style>\n</head>\n<body>\n\n<div id=\"game-container\">\n    <canvas id=\"gameCanvas\"></canvas>\n    <div id=\"controls\">\n        <div></div><div class=\"btn\" onclick=\"setDir('UP')\">▲</div><div></div>\n        <div class=\"btn\" onclick=\"setDir('LEFT')\">◀</div><div class=\"btn\" onclick=\"setDir('DOWN')\">▼</div><div class=\"btn\" onclick=\"setDir('RIGHT')\">▶</div>\n    </div>\n</div>\n\n<script>\nconst canvas = document.getElementById('gameCanvas');\nconst ctx = canvas.getContext('2d');\ncanvas.width = 360;\ncanvas.height = 640;\n\nconst GRID = 20;\nconst COLS = canvas.width / GRID;\nconst ROWS = canvas.height / GRID;\n\nlet snake = [{x: 9, y: 15}, {x: 8, y: 15}];\nlet dir = {x: 1, y: 0};\nlet food = {x: 15, y: 15, type: 'normal'};\nlet score = 0;\nlet highScore = localStorage.getItem('snakeHighScore') || 0;\nlet gameState = 'START'; // START, PLAYING, PAUSED, GAMEOVER\nlet speed = 8;\nlet lastTime = 0;\nlet particles = [];\n\n// 音频上下文\nconst audioCtx = new (window.AudioContext || window.webkitAudioContext)();\nfunction playTone(freq, type, duration) {\n    const osc = audioCtx.createOscillator();\n    const gain = audioCtx.createGain();\n    osc.type = type;\n    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);\n    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);\n    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);\n    osc.connect(gain);\n    gain.connect(audioCtx.destination);\n    osc.start();\n    osc.stop(audioCtx.currentTime + duration);\n}\n\nfunction setDir(d) {\n    if (d === 'UP' && dir.y === 0) dir = {x: 0, y: -1};\n    if (d === 'DOWN' && dir.y === 0) dir = {x: 0, y: 1};\n    if (d === 'LEFT' && dir.x === 0) dir = {x: -1, y: 0};\n    if (d === 'RIGHT' && dir.x === 0) dir = {x: 1, y: 0};\n}\n\nfunction spawnFood() {\n    food.x = Math.floor(Math.random() * COLS);\n    food.y = Math.floor(Math.random() * ROWS);\n    food.type = Math.random() > 0.9 ? 'gold' : 'normal';\n}\n\nfunction update(time) {\n    if (gameState !== 'PLAYING') return;\n    \n    const deltaTime = time - lastTime;\n    if (deltaTime < 1000 / speed) return;\n    lastTime = time;\n\n    const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};\n\n    // 碰撞检测\n    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS || snake.some(s => s.x === head.x && s.y === head.y)) {\n        gameState = 'GAMEOVER';\n        playTone(100, 'sawtooth', 0.5);\n        if (score > highScore) { highScore = score; localStorage.setItem('snakeHighScore', highScore); }\n        return;\n    }\n\n    snake.unshift(head);\n    if (head.x === food.x && head.y === food.y) {\n        score += food.type === 'gold' ? 50 : 10;\n        if (score % 50 === 0) speed = Math.min(speed + 1, 15);\n        playTone(600, 'sine', 0.1);\n        spawnFood();\n    } else {\n        snake.pop();\n    }\n}\n\nfunction draw() {\n    ctx.clearRect(0, 0, canvas.width, canvas.height);\n    \n    // 背景网格\n    ctx.strokeStyle = '#333355';\n    for(let i=0; i<COLS; i++) { ctx.beginPath(); ctx.moveTo(i*GRID, 0); ctx.lineTo(i*GRID, canvas.height); ctx.stroke(); }\n    for(let i=0; i<ROWS; i++) { ctx.beginPath(); ctx.moveTo(0, i*GRID); ctx.lineTo(canvas.width, i*GRID); ctx.stroke(); }\n\n    // 绘制蛇\n    snake.forEach((s, i) => {\n        ctx.fillStyle = i === 0 ? '#2ecc71' : '#27ae60';\n        ctx.fillRect(s.x*GRID + 2, s.y*GRID + 2, GRID-4, GRID-4);\n        if (i === 0) {\n            ctx.fillStyle = 'white';\n            ctx.fillRect(s.x*GRID + 5, s.y*GRID + 5, 4, 4);\n            ctx.fillRect(s.x*GRID + 12, s.y*GRID + 5, 4, 4);\n        }\n    });\n\n    // 绘制食物\n    ctx.fillStyle = food.type === 'gold' ? '#f1c40f' : '#e74c3c';\n    ctx.beginPath();\n    ctx.arc(food.x*GRID + GRID/2, food.y*GRID + GRID/2, GRID/3, 0, Math.PI*2);\n    ctx.fill();\n\n    // UI\n    ctx.fillStyle = 'rgba(0,0,0,0.5)';\n    ctx.fillRect(10, 10, 120, 60);\n    ctx.fillStyle = 'white';\n    ctx.font = '16px Arial';\n    ctx.fillText(`Score: ${score}`, 20, 35);\n    ctx.fillText(`Best: ${highScore}`, 20, 55);\n\n    if (gameState === 'START') {\n        ctx.fillStyle = 'white';\n        ctx.fillText(\"按空格键开始\", 130, 320);\n    }\n}\n\nfunction loop(time) {\n    update(time);\n    draw();\n    requestAnimationFrame(loop);\n}\n\nwindow.addEventListener('keydown', e => {\n    if (e.code === 'Space') gameState = 'PLAYING';\n    if (e.code === 'ArrowUp') setDir('UP');\n    if (e.code === 'ArrowDown') setDir('DOWN');\n    if (e.code === 'ArrowLeft') setDir('LEFT');\n    if (e.code === 'ArrowRight') setDir('RIGHT');\n});\n\nrequestAnimationFrame(loop);\n</script>\n</body>\n</html>\n```",
+  "rawResponse": {
+    "id": "0ae1a49c701da9191338bdea6ce78f7f",
+    "object": "chat.completion",
+    "created": 1773233290512,
+    "model": "gemini-3.1-flash-lite-preview",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "```html\n<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n    <meta charset=\"UTF-8\">\n    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no\">\n    <title>贪食蛇大作战</title>\n    <style>\n        body { margin: 0; background: #0f0f1a; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; color: white; font-family: sans-serif; overflow: hidden; touch-action: none; }\n        #game-container { position: relative; width: 360px; }\n        canvas { background: #1a1a2e; display: block; margin: 0 auto; border: 2px solid #333355; border-radius: 8px; }\n        .ui-layer { position: absolute; top: 0; left: 0; width: 360px; height: 640px; pointer-events: none; }\n        #controls { display: grid; grid-template-columns: repeat(3, 60px); gap: 10px; margin-top: 20px; }\n        .btn { width: 60px; height: 60px; background: #333355; border-radius: 50%; display: flex; align-items: center; justify-content: center; pointer-events: auto; user-select: none; }\n        .btn:active { background: #555588; }\n    </style>\n</head>\n<body>\n\n<div id=\"game-container\">\n    <canvas id=\"gameCanvas\"></canvas>\n    <div id=\"controls\">\n        <div></div><div class=\"btn\" onclick=\"setDir('UP')\">▲</div><div></div>\n        <div class=\"btn\" onclick=\"setDir('LEFT')\">◀</div><div class=\"btn\" onclick=\"setDir('DOWN')\">▼</div><div class=\"btn\" onclick=\"setDir('RIGHT')\">▶</div>\n    </div>\n</div>\n\n<script>\nconst canvas = document.getElementById('gameCanvas');\nconst ctx = canvas.getContext('2d');\ncanvas.width = 360;\ncanvas.height = 640;\n\nconst GRID = 20;\nconst COLS = canvas.width / GRID;\nconst ROWS = canvas.height / GRID;\n\nlet snake = [{x: 9, y: 15}, {x: 8, y: 15}];\nlet dir = {x: 1, y: 0};\nlet food = {x: 15, y: 15, type: 'normal'};\nlet score = 0;\nlet highScore = localStorage.getItem('snakeHighScore') || 0;\nlet gameState = 'START'; // START, PLAYING, PAUSED, GAMEOVER\nlet speed = 8;\nlet lastTime = 0;\nlet particles = [];\n\n// 音频上下文\nconst audioCtx = new (window.AudioContext || window.webkitAudioContext)();\nfunction playTone(freq, type, duration) {\n    const osc = audioCtx.createOscillator();\n    const gain = audioCtx.createGain();\n    osc.type = type;\n    osc.frequency.setValueAtTime(freq, audioCtx.currentTime);\n    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);\n    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);\n    osc.connect(gain);\n    gain.connect(audioCtx.destination);\n    osc.start();\n    osc.stop(audioCtx.currentTime + duration);\n}\n\nfunction setDir(d) {\n    if (d === 'UP' && dir.y === 0) dir = {x: 0, y: -1};\n    if (d === 'DOWN' && dir.y === 0) dir = {x: 0, y: 1};\n    if (d === 'LEFT' && dir.x === 0) dir = {x: -1, y: 0};\n    if (d === 'RIGHT' && dir.x === 0) dir = {x: 1, y: 0};\n}\n\nfunction spawnFood() {\n    food.x = Math.floor(Math.random() * COLS);\n    food.y = Math.floor(Math.random() * ROWS);\n    food.type = Math.random() > 0.9 ? 'gold' : 'normal';\n}\n\nfunction update(time) {\n    if (gameState !== 'PLAYING') return;\n    \n    const deltaTime = time - lastTime;\n    if (deltaTime < 1000 / speed) return;\n    lastTime = time;\n\n    const head = {x: snake[0].x + dir.x, y: snake[0].y + dir.y};\n\n    // 碰撞检测\n    if (head.x < 0 || head.x >= COLS || head.y < 0 || head.y >= ROWS || snake.some(s => s.x === head.x && s.y === head.y)) {\n        gameState = 'GAMEOVER';\n        playTone(100, 'sawtooth', 0.5);\n        if (score > highScore) { highScore = score; localStorage.setItem('snakeHighScore', highScore); }\n        return;\n    }\n\n    snake.unshift(head);\n    if (head.x === food.x && head.y === food.y) {\n        score += food.type === 'gold' ? 50 : 10;\n        if (score % 50 === 0) speed = Math.min(speed + 1, 15);\n        playTone(600, 'sine', 0.1);\n        spawnFood();\n    } else {\n        snake.pop();\n    }\n}\n\nfunction draw() {\n    ctx.clearRect(0, 0, canvas.width, canvas.height);\n    \n    // 背景网格\n    ctx.strokeStyle = '#333355';\n    for(let i=0; i<COLS; i++) { ctx.beginPath(); ctx.moveTo(i*GRID, 0); ctx.lineTo(i*GRID, canvas.height); ctx.stroke(); }\n    for(let i=0; i<ROWS; i++) { ctx.beginPath(); ctx.moveTo(0, i*GRID); ctx.lineTo(canvas.width, i*GRID); ctx.stroke(); }\n\n    // 绘制蛇\n    snake.forEach((s, i) => {\n        ctx.fillStyle = i === 0 ? '#2ecc71' : '#27ae60';\n        ctx.fillRect(s.x*GRID + 2, s.y*GRID + 2, GRID-4, GRID-4);\n        if (i === 0) {\n            ctx.fillStyle = 'white';\n            ctx.fillRect(s.x*GRID + 5, s.y*GRID + 5, 4, 4);\n            ctx.fillRect(s.x*GRID + 12, s.y*GRID + 5, 4, 4);\n        }\n    });\n\n    // 绘制食物\n    ctx.fillStyle = food.type === 'gold' ? '#f1c40f' : '#e74c3c';\n    ctx.beginPath();\n    ctx.arc(food.x*GRID + GRID/2, food.y*GRID + GRID/2, GRID/3, 0, Math.PI*2);\n    ctx.fill();\n\n    // UI\n    ctx.fillStyle = 'rgba(0,0,0,0.5)';\n    ctx.fillRect(10, 10, 120, 60);\n    ctx.fillStyle = 'white';\n    ctx.font = '16px Arial';\n    ctx.fillText(`Score: ${score}`, 20, 35);\n    ctx.fillText(`Best: ${highScore}`, 20, 55);\n\n    if (gameState === 'START') {\n        ctx.fillStyle = 'white';\n        ctx.fillText(\"按空格键开始\", 130, 320);\n    }\n}\n\nfunction loop(time) {\n    update(time);\n    draw();\n    requestAnimationFrame(loop);\n}\n\nwindow.addEventListener('keydown', e => {\n    if (e.code === 'Space') gameState = 'PLAYING';\n    if (e.code === 'ArrowUp') setDir('UP');\n    if (e.code === 'ArrowDown') setDir('DOWN');\n    if (e.code === 'ArrowLeft') setDir('LEFT');\n    if (e.code === 'ArrowRight') setDir('RIGHT');\n});\n\nrequestAnimationFrame(loop);\n</script>\n</body>\n</html>\n```",
+          "reasoning_details": [
+            {
+              "type": "reasoning.encrypted",
+              "data": "AY89a1+kRSYFmz7Q6C4Pfjg28txrxPPIVaPTPTrNDQc7Wl9uakyAVhrfCeE+9Ao8bIs=",
+              "format": "google-gemini-v1",
+              "index": 0
+            }
+          ]
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 1142,
+      "completion_tokens": 2073,
+      "total_tokens": 3215,
+      "prompt_tokens_details": {
+        "audio_tokens": 0,
+        "cached_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "text_tokens": 0,
+        "image_tokens": 0,
+        "video_tokens": 0
+      },
+      "completion_tokens_details": {
+        "audio_tokens": 0,
+        "reasoning_tokens": 0,
+        "accepted_prediction_tokens": 0,
+        "rejected_prediction_tokens": 0,
+        "text_tokens": 0,
+        "image_tokens": 0,
+        "video_tokens": 0
+      }
+    },
+    "system_fingerprint": ""
+  },
+  "usage": {
+    "prompt_tokens": 1142,
+    "completion_tokens": 2073,
+    "total_tokens": 3215,
+    "prompt_tokens_details": {
+      "audio_tokens": 0,
+      "cached_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "text_tokens": 0,
+      "image_tokens": 0,
+      "video_tokens": 0
+    },
+    "completion_tokens_details": {
+      "audio_tokens": 0,
+      "reasoning_tokens": 0,
+      "accepted_prediction_tokens": 0,
+      "rejected_prediction_tokens": 0,
+      "text_tokens": 0,
+      "image_tokens": 0,
+      "video_tokens": 0
+    }
+  },
+  "duration": 6299
+}

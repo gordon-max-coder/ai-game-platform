@@ -1,0 +1,1208 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>羊了个羊</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #2d5a1b; display: flex; justify-content: center; align-items: center; min-height: 100vh; font-family: 'Arial', sans-serif; overflow: hidden; }
+canvas { max-width: 100%; height: auto; display: block; margin: 0 auto; border-radius: 8px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+</style>
+</head>
+<body>
+<canvas id="gameCanvas"></canvas>
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = 360;
+canvas.height = 640;
+
+// Game constants
+const CARD_W = 44;
+const CARD_H = 52;
+const SLOT_Y = 565;
+const SLOT_X_START = 18;
+const SLOT_W = 46;
+const MAX_SLOTS = 7;
+
+// Card icons - farm themed emoji representations
+const ICONS = [
+    { emoji: '🐑', color: '#f0f0f0', name: 'sheep' },
+    { emoji: '🐔', color: '#ffcc00', name: 'chicken' },
+    { emoji: '🐷', color: '#ffaaaa', name: 'pig' },
+    { emoji: '🐄', color: '#8B4513', name: 'cow' },
+    { emoji: '🌻', color: '#FFD700', name: 'sunflower' },
+    { emoji: '🥕', color: '#FF6600', name: 'carrot' },
+    { emoji: '🌽', color: '#FFEE00', name: 'corn' },
+    { emoji: '🍎', color: '#FF0000', name: 'apple' },
+    { emoji: '🐴', color: '#8B6914', name: 'horse' },
+    { emoji: '🐶', color: '#DEB887', name: 'dog' },
+    { emoji: '🌾', color: '#DAA520', name: 'wheat' },
+    { emoji: '🥚', color: '#FFFACD', name: 'egg' }
+];
+
+// Game state
+let gameState = 'menu'; // menu, playing, win, lose
+let currentLevel = 1;
+let cards = [];
+let slotCards = [];
+let score = 0;
+let totalScore = 0;
+let animatingCards = [];
+let particles = [];
+let lastAction = null;
+let usedItems = { remove3: false, undo: false, shuffle: false, revive: false };
+let revived = false;
+let shakeTimer = 0;
+let messageText = '';
+let messageTimer = 0;
+let dailySeed = Math.floor(Date.now() / 86400000);
+let blindBoxCards = [];
+let hoverCard = null;
+let comboCount = 0;
+let comboTimer = 0;
+
+// Simple seeded random
+function seededRandom(seed) {
+    let s = seed;
+    return function() {
+        s = (s * 16807 + 0) % 2147483647;
+        return (s - 1) / 2147483646;
+    };
+}
+
+let rng = seededRandom(dailySeed);
+
+function shuffle(arr) {
+    for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+}
+
+function generateLevel(level) {
+    cards = [];
+    slotCards = [];
+    animatingCards = [];
+    particles = [];
+    blindBoxCards = [];
+    lastAction = null;
+    usedItems = { remove3: false, undo: false, shuffle: false, revive: false };
+    revived = false;
+    comboCount = 0;
+    comboTimer = 0;
+    score = 0;
+
+    if (level === 1) {
+        generateLevel1();
+    } else {
+        generateLevel2();
+    }
+}
+
+function generateLevel1() {
+    const numTypes = 3;
+    const layers = 2;
+    const cardsPerType = 6; // Must be multiple of 3
+    let typePool = [];
+
+    for (let i = 0; i < numTypes; i++) {
+        for (let j = 0; j < cardsPerType; j++) {
+            typePool.push(i);
+        }
+    }
+    shuffle(typePool);
+
+    // Layout: grid-based with 2 layers
+    const gridCols = 4;
+    const gridRows = 3;
+    const startX = (360 - gridCols * (CARD_W + 8)) / 2;
+    const startY = 100;
+
+    let idx = 0;
+    for (let layer = 0; layer < layers; layer++) {
+        const offsetX = layer * 15;
+        const offsetY = layer * 15;
+        for (let r = 0; r < gridRows; r++) {
+            for (let c = 0; c < gridCols; c++) {
+                if (idx >= typePool.length) break;
+                // Skip some positions on upper layer for variety
+                if (layer === 1 && ((r + c) % 2 === 0)) continue;
+                if (idx >= typePool.length) break;
+                cards.push({
+                    id: cards.length,
+                    type: typePool[idx],
+                    x: startX + c * (CARD_W + 8) + offsetX,
+                    y: startY + r * (CARD_H + 8) + offsetY,
+                    layer: layer,
+                    removed: false,
+                    isBlind: false,
+                    revealed: true,
+                    animX: 0, animY: 0, animating: false,
+                    scale: 1
+                });
+                idx++;
+            }
+        }
+    }
+
+    // Add remaining cards
+    while (idx < typePool.length) {
+        const c = (idx - 12) % 4;
+        const r = Math.floor((idx - 12) / 4) + 3;
+        cards.push({
+            id: cards.length,
+            type: typePool[idx],
+            x: startX + c * (CARD_W + 8),
+            y: startY + r * (CARD_H + 8),
+            layer: 0,
+            removed: false,
+            isBlind: false,
+            revealed: true,
+            animX: 0, animY: 0, animating: false,
+            scale: 1
+        });
+        idx++;
+    }
+}
+
+function generateLevel2() {
+    const numTypes = 12;
+    const layers = 6;
+    // Each type needs multiples of 3
+    const cardsPerType = 9; // 12 * 9 = 108 cards
+    let typePool = [];
+
+    for (let i = 0; i < numTypes; i++) {
+        for (let j = 0; j < cardsPerType; j++) {
+            typePool.push(i);
+        }
+    }
+    shuffle(typePool);
+
+    const totalCards = typePool.length;
+    let idx = 0;
+
+    // Create a complex overlapping layout
+    const centerX = 180;
+    const centerY = 260;
+
+    for (let layer = 0; layer < layers; layer++) {
+        const cardsInLayer = layer < 3 ? 22 : (layer < 5 ? 16 : 12);
+        const cols = layer < 3 ? 5 : (layer < 5 ? 4 : 3);
+        const rows = Math.ceil(cardsInLayer / cols);
+        const offsetX = layer * 8 - 20;
+        const offsetY = layer * 8 - 20;
+        const spacing = layer < 3 ? 4 : 8;
+
+        const layerW = cols * (CARD_W * 0.7 + spacing);
+        const layerH = rows * (CARD_H * 0.7 + spacing);
+        const sx = centerX - layerW / 2 + offsetX;
+        const sy = centerY - layerH / 2 + offsetY;
+
+        let count = 0;
+        for (let r = 0; r < rows && idx < totalCards; r++) {
+            for (let c = 0; c < cols && idx < totalCards && count < cardsInLayer; c++) {
+                // Add some randomness to position
+                const jitterX = (Math.random() - 0.5) * 10;
+                const jitterY = (Math.random() - 0.5) * 10;
+
+                const isBlind = layer >= 3 && Math.random() < 0.3;
+
+                cards.push({
+                    id: cards.length,
+                    type: typePool[idx],
+                    x: sx + c * (CARD_W * 0.7 + spacing) + jitterX,
+                    y: sy + r * (CARD_H * 0.7 + spacing) + jitterY,
+                    layer: layer,
+                    removed: false,
+                    isBlind: isBlind,
+                    revealed: !isBlind,
+                    animX: 0, animY: 0, animating: false,
+                    scale: 1
+                });
+                idx++;
+                count++;
+            }
+        }
+    }
+
+    // Add remaining cards as scattered pile
+    while (idx < totalCards) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * 60 + 20;
+        cards.push({
+            id: cards.length,
+            type: typePool[idx],
+            x: centerX + Math.cos(angle) * dist - CARD_W / 2,
+            y: centerY + Math.sin(angle) * dist - CARD_H / 2 + 100,
+            layer: Math.floor(Math.random() * 3),
+            removed: false,
+            isBlind: Math.random() < 0.2,
+            revealed: Math.random() >= 0.2,
+            animX: 0, animY: 0, animating: false,
+            scale: 1
+        });
+        idx++;
+    }
+}
+
+function isCardBlocked(card) {
+    if (card.removed) return true;
+    for (let other of cards) {
+        if (other.removed || other.id === card.id) continue;
+        if (other.layer <= card.layer) continue;
+        // Check overlap
+        if (card.x < other.x + CARD_W - 5 &&
+            card.x + CARD_W - 5 > other.x &&
+            card.y < other.y + CARD_H - 5 &&
+            card.y + CARD_H - 5 > other.y) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function isCardClickable(card) {
+    return !card.removed && !isCardBlocked(card) && !card.animating;
+}
+
+function getSlotPosition(index) {
+    return {
+        x: SLOT_X_START + index * SLOT_W,
+        y: SLOT_Y
+    };
+}
+
+function addToSlot(card) {
+    if (slotCards.length >= MAX_SLOTS) return false;
+
+    // Save state for undo
+    lastAction = {
+        card: card,
+        originalX: card.x,
+        originalY: card.y,
+        slotState: [...slotCards]
+    };
+
+    card.removed = true;
+
+    // If blind box, reveal it now
+    if (card.isBlind && !card.revealed) {
+        card.revealed = true;
+        card.type = Math.floor(Math.random() * (currentLevel === 1 ? 3 : 12));
+    }
+
+    // Find insert position (group same types together)
+    let insertIdx = slotCards.length;
+    for (let i = 0; i < slotCards.length; i++) {
+        if (slotCards[i].type === card.type) {
+            // Find end of this type group
+            let j = i;
+            while (j < slotCards.length && slotCards[j].type === card.type) j++;
+            insertIdx = j;
+            break;
+        }
+    }
+
+    slotCards.splice(insertIdx, 0, card);
+
+    // Animate card to slot
+    const targetPos = getSlotPosition(insertIdx);
+    card.animating = true;
+    card.animStartX = card.x;
+    card.animStartY = card.y;
+    card.animTargetX = targetPos.x;
+    card.animTargetY = targetPos.y;
+    card.animProgress = 0;
+
+    animatingCards.push(card);
+
+    return true;
+}
+
+function checkMatch() {
+    // Count types in slot
+    let typeCounts = {};
+    for (let card of slotCards) {
+        typeCounts[card.type] = (typeCounts[card.type] || 0) + 1;
+    }
+
+    for (let type in typeCounts) {
+        if (typeCounts[type] >= 3) {
+            // Remove 3 of this type
+            let removed = 0;
+            let removeIndices = [];
+            for (let i = 0; i < slotCards.length && removed < 3; i++) {
+                if (slotCards[i].type == type) {
+                    removeIndices.push(i);
+                    removed++;
+                }
+            }
+
+            // Create particles at removal positions
+            for (let idx of removeIndices) {
+                const pos = getSlotPosition(idx);
+                createMatchParticles(pos.x + CARD_W / 2, pos.y + CARD_H / 2, slotCards[idx].type);
+            }
+
+            // Remove from array (reverse order)
+            for (let i = removeIndices.length - 1; i >= 0; i--) {
+                slotCards.splice(removeIndices[i], 1);
+            }
+
+            comboCount++;
+            comboTimer = 60;
+            score += 100 * comboCount;
+
+            // Check for more matches
+            setTimeout(checkMatch, 200);
+            return true;
+        }
+    }
+
+    comboCount = 0;
+
+    // Check lose condition
+    if (slotCards.length >= MAX_SLOTS) {
+        if (!usedItems.revive && !revived) {
+            // Can still use revive
+        }
+        setTimeout(() => {
+            if (slotCards.length >= MAX_SLOTS) {
+                gameState = 'lose';
+            }
+        }, 500);
+    }
+
+    // Check win condition
+    let remaining = cards.filter(c => !c.removed).length;
+    if (remaining === 0 && slotCards.length === 0) {
+        setTimeout(() => {
+            gameState = 'win';
+            totalScore += score;
+        }, 500);
+    }
+
+    return false;
+}
+
+function createMatchParticles(x, y, type) {
+    const color = ICONS[type].color;
+    for (let i = 0; i < 12; i++) {
+        const angle = (Math.PI * 2 / 12) * i + Math.random() * 0.5;
+        const speed = 2 + Math.random() * 4;
+        particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 2,
+            life: 1,
+            decay: 0.02 + Math.random() * 0.02,
+            size: 3 + Math.random() * 4,
+            color: color,
+            type: 'star'
+        });
+    }
+}
+
+function createClickParticles(x, y) {
+    for (let i = 0; i < 6; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 2;
+        particles.push({
+            x, y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1,
+            decay: 0.04,
+            size: 2 + Math.random() * 2,
+            color: '#fff',
+            type: 'circle'
+        });
+    }
+}
+
+// Item functions
+function useRemove3() {
+    if (usedItems.remove3 || slotCards.length === 0) return;
+    usedItems.remove3 = true;
+
+    const count = Math.min(3, slotCards.length);
+    for (let i = 0; i < count; i++) {
+        const idx = Math.floor(Math.random() * slotCards.length);
+        const card = slotCards[idx];
+        createMatchParticles(
+            SLOT_X_START + idx * SLOT_W + CARD_W / 2,
+            SLOT_Y + CARD_H / 2,
+            card.type
+        );
+        slotCards.splice(idx, 1);
+    }
+    score += 50;
+    showMessage('移出三张！');
+}
+
+function useUndo() {
+    if (usedItems.undo || !lastAction) return;
+    usedItems.undo = true;
+
+    const action = lastAction;
+    action.card.removed = false;
+    action.card.x = action.originalX;
+    action.card.y = action.originalY;
+    action.card.animating = false;
+
+    // Restore slot state
+    slotCards.length = 0;
+    for (let c of action.slotState) {
+        slotCards.push(c);
+    }
+
+    lastAction = null;
+    showMessage('撤回成功！');
+}
+
+function useShuffle() {
+    if (usedItems.shuffle) return;
+    usedItems.shuffle = true;
+
+    let remaining = cards.filter(c => !c.removed);
+    let types = remaining.map(c => c.type);
+    shuffle(types);
+    for (let i = 0; i < remaining.length; i++) {
+        remaining[i].type = types[i];
+    }
+    showMessage('洗牌完成！');
+}
+
+function useRevive() {
+    if (usedItems.revive || gameState !== 'lose') return;
+    usedItems.revive = true;
+    revived = true;
+
+    // Clear 3 cards from slot
+    const count = Math.min(3, slotCards.length);
+    for (let i = 0; i < count; i++) {
+        slotCards.pop();
+    }
+
+    gameState = 'playing';
+    showMessage('复活成功！');
+}
+
+function showMessage(text) {
+    messageText = text;
+    messageTimer = 90;
+}
+
+// Drawing functions
+function drawBackground() {
+    // Sky gradient
+    const grad = ctx.createLinearGradient(0, 0, 0, 640);
+    grad.addColorStop(0, '#87CEEB');
+    grad.addColorStop(0.4, '#98FB98');
+    grad.addColorStop(1, '#228B22');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 360, 640);
+
+    // Clouds
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    drawCloud(50, 30, 40);
+    drawCloud(200, 50, 35);
+    drawCloud(300, 20, 30);
+
+    // Fence at bottom
+    ctx.fillStyle = '#8B6914';
+    for (let i = 0; i < 10; i++) {
+        ctx.fillRect(i * 40 + 5, 540, 8, 25);
+        ctx.fillRect(i * 40 + 25, 540, 8, 20);
+    }
+    ctx.fillRect(0, 548, 360, 5);
+    ctx.fillRect(0, 558, 360, 4);
+
+    // Grass tufts
+    ctx.fillStyle = '#32CD32';
+    for (let i = 0; i < 20; i++) {
+        const gx = (i * 19 + dailySeed * 7) % 360;
+        drawGrass(gx, 535);
+    }
+}
+
+function drawCloud(x, y, size) {
+    ctx.beginPath();
+    ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.4, y - size * 0.2, size * 0.4, 0, Math.PI * 2);
+    ctx.arc(x + size * 0.7, y, size * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+}
+
+function drawGrass(x, y) {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x - 3, y - 8);
+    ctx.lineTo(x + 1, y);
+    ctx.lineTo(x + 2, y - 10);
+    ctx.lineTo(x + 4, y);
+    ctx.lineTo(x + 6, y - 7);
+    ctx.lineTo(x + 8, y);
+    ctx.fill();
+}
+
+function drawCard(card, x, y, w, h, highlighted) {
+    const blocked = isCardBlocked(card);
+
+    ctx.save();
+
+    // Card shadow
+    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+    roundRect(x + 2, y + 2, w, h, 6, true, false);
+
+    // Card background
+    if (card.isBlind && !card.revealed) {
+        // Blind box card
+        const blindGrad = ctx.createLinearGradient(x, y, x + w, y + h);
+        blindGrad.addColorStop(0, '#9B59B6');
+        blindGrad.addColorStop(1, '#8E44AD');
+        ctx.fillStyle = blindGrad;
+    } else if (blocked && !card.removed) {
+        ctx.fillStyle = '#d0d0d0';
+    } else if (highlighted) {
+        ctx.fillStyle = '#fffacd';
+    } else {
+        ctx.fillStyle = '#ffffff';
+    }
+    roundRect(x, y, w, h, 6, true, false);
+
+    // Card border
+    ctx.strokeStyle = highlighted ? '#FFD700' : (blocked ? '#999' : '#666');
+    ctx.lineWidth = highlighted ? 2 : 1;
+    roundRect(x, y, w, h, 6, false, true);
+
+    // Card content
+    if (card.isBlind && !card.revealed) {
+        // Question mark for blind box
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 24px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('?', x + w / 2, y + h / 2);
+
+        // Sparkle effect
+        ctx.fillStyle = '#FFD700';
+        const t = Date.now() / 500;
+        const sparkleSize = 2 + Math.sin(t) * 1;
+        ctx.fillRect(x + 8, y + 8, sparkleSize, sparkleSize);
+        ctx.fillRect(x + w - 10, y + 10, sparkleSize, sparkleSize);
+    } else {
+        // Draw icon
+        const icon = ICONS[card.type];
+
+        // Background tint
+        ctx.fillStyle = icon.color + '40';
+        roundRect(x + 3, y + 3, w - 6, h - 6, 4, true, false);
+
+        // Emoji
+        ctx.font = '26px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(icon.emoji, x + w / 2, y + h / 2);
+    }
+
+    // Dim overlay for blocked cards
+    if (blocked && !card.removed) {
+        ctx.fillStyle = 'rgba(0,0,0,0.15)';
+        roundRect(x, y, w, h, 6, true, false);
+    }
+
+    ctx.restore();
+}
+
+function drawSlotArea() {
+    // Slot background
+    ctx.fillStyle = 'rgba(139,69,19,0.8)';
+    roundRect(10, SLOT_Y - 8, 340, CARD_H + 16, 10, true, false);
+
+    ctx.strokeStyle = '#654321';
+    ctx.lineWidth = 2;
+    roundRect(10, SLOT_Y - 8, 340, CARD_H + 16, 10, false, true);
+
+    // Draw slot outlines
+    for (let i = 0; i < MAX_SLOTS; i++) {
+        const pos = getSlotPosition(i);
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        roundRect(pos.x, pos.y, CARD_W, CARD_H, 4, false, true);
+        ctx.setLineDash([]);
+    }
+
+    // Draw cards in slot
+    for (let i = 0; i < slotCards.length; i++) {
+        const card = slotCards[i];
+        const pos = getSlotPosition(i);
+        if (!card.animating) {
+            drawCard(card, pos.x, pos.y, CARD_W, CARD_H, false);
+        }
+    }
+
+    // Warning when nearly full
+    if (slotCards.length >= 5) {
+        const alpha = 0.3 + Math.sin(Date.now() / 200) * 0.2;
+        ctx.fillStyle = `rgba(255,0,0,${alpha})`;
+        roundRect(10, SLOT_Y - 8, 340, CARD_H + 16, 10, true, false);
+    }
+}
+
+function drawItems() {
+    const items = [
+        { name: '移出', icon: '🗑️', used: usedItems.remove3, action: 'remove3' },
+        { name: '撤回', icon: '↩️', used: usedItems.undo, action: 'undo' },
+        { name: '洗牌', icon: '🔀', used: usedItems.shuffle, action: 'shuffle' },
+    ];
+
+    const itemY = 600;
+    const itemW = 70;
+    const startX = (360 - items.length * itemW) / 2;
+
+    for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const x = startX + i * itemW + 5;
+
+        ctx.fillStyle = item.used ? 'rgba(100,100,100,0.6)' : 'rgba(255,200,50,0.9)';
+        roundRect(x, itemY, itemW - 10, 32, 8, true, false);
+
+        ctx.strokeStyle = item.used ? '#555' : '#CC8800';
+        ctx.lineWidth = 1;
+        roundRect(x, itemY, itemW - 10, 32, 8, false, true);
+
+        ctx.fillStyle = item.used ? '#888' : '#333';
+        ctx.font = '11px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(item.icon + item.name, x + (itemW - 10) / 2, itemY + 16);
+    }
+}
+
+function drawHUD() {
+    // Level indicator
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    roundRect(10, 8, 100, 30, 8, true, false);
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`第 ${currentLevel} 关`, 20, 23);
+
+    // Score
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    roundRect(130, 8, 100, 30, 8, true, false);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`分数: ${score}`, 180, 23);
+
+    // Remaining cards
+    const remaining = cards.filter(c => !c.removed).length;
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    roundRect(250, 8, 100, 30, 8, true, false);
+    ctx.fillStyle = '#98FB98';
+    ctx.font = 'bold 14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(`剩余: ${remaining}`, 300, 23);
+
+    // Combo display
+    if (comboTimer > 0 && comboCount > 1) {
+        const scale = 1 + Math.sin(comboTimer * 0.2) * 0.1;
+        ctx.save();
+        ctx.translate(180, 60);
+        ctx.scale(scale, scale);
+        ctx.fillStyle = '#FF4500';
+        ctx.font = 'bold 20px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 3;
+        ctx.strokeText(`${comboCount}x COMBO!`, 0, 0);
+        ctx.fillText(`${comboCount}x COMBO!`, 0, 0);
+        ctx.restore();
+    }
+}
+
+function drawMenu() {
+    drawBackground();
+
+    // Title
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    roundRect(30, 100, 300, 200, 20, true, false);
+
+    // Title text
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 36px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.strokeStyle = '#8B4513';
+    ctx.lineWidth = 3;
+    ctx.strokeText('🐑 羊了个羊 🐑', 180, 150);
+    ctx.fillText('🐑 羊了个羊 🐑', 180, 150);
+
+    // Subtitle
+    ctx.fillStyle = '#fff';
+    ctx.font = '14px Arial';
+    ctx.fillText('农场主题三消益智游戏', 180, 185);
+
+    // Level buttons
+    drawButton(80, 230, 200, 50, '第一关 (简单)', '#4CAF50', true);
+    drawButton(80, 300, 200, 50, '第二关 (地狱)', '#f44336', true);
+
+    // Instructions
+    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+    roundRect(30, 380, 300, 200, 15, true, false);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '13px Arial';
+    ctx.textAlign = 'center';
+    const instructions = [
+        '📖 游戏规则',
+        '',
+        '点击无遮挡的卡牌移入卡槽',
+        '集齐3张相同图案自动消除',
+        '卡槽满7张且无法消除则失败',
+        '清空所有卡牌即为通关',
+        '',
+        '🎯 每日更新关卡布局',
+        `📅 今日种子: ${dailySeed}`
+    ];
+
+    for (let i = 0; i < instructions.length; i++) {
+        ctx.fillText(instructions[i], 180, 400 + i * 20);
+    }
+}
+
+function drawButton(x, y, w, h, text, color, enabled) {
+    ctx.fillStyle = enabled ? color : '#888';
+    roundRect(x, y, w, h, 12, true, false);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 2;
+    roundRect(x, y, w, h, 12, false, true);
+
+    // Highlight
+    const hlGrad = ctx.createLinearGradient(x, y, x, y + h / 2);
+    hlGrad.addColorStop(0, 'rgba(255,255,255,0.3)');
+    hlGrad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hlGrad;
+    roundRect(x, y, w, h / 2, 12, true, false);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 18px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x + w / 2, y + h / 2);
+}
+
+function drawWinScreen() {
+    drawBackground();
+    drawPlayField();
+
+    // Overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx.fillRect(0, 0, 360, 640);
+
+    // Win panel
+    ctx.fillStyle = 'rgba(50,200,50,0.9)';
+    roundRect(40, 180, 280, 250, 20, true, false);
+
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 3;
+    roundRect(40, 180, 280, 250, 20, false, true);
+
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 32px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('🎉 通关成功！🎉', 180, 230);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '18px Arial';
+    ctx.fillText(`得分: ${score}`, 180, 280);
+    ctx.fillText(`总分: ${totalScore}`, 180, 310);
+
+    if (currentLevel === 1) {
+        drawButton(80, 340, 200, 45, '挑战第二关', '#FF6600', true);
+    } else {
+        ctx.fillStyle = '#FFD700';
+        ctx.font = 'bold 16px Arial';
+        ctx.fillText('🏆 你是真正的羊王！🏆', 180, 350);
+    }
+
+    drawButton(80, 395, 200, 40, '返回菜单', '#666', true);
+
+    // Victory particles
+    if (Math.random() < 0.3) {
+        particles.push({
+            x: Math.random() * 360,
+            y: -10,
+            vx: (Math.random() - 0.5) * 2,
+            vy: 1 + Math.random() * 2,
+            life: 1,
+            decay: 0.005,
+            size: 4 + Math.random() * 4,
+            color: ['#FFD700', '#FF6347', '#00FF7F', '#FF69B4', '#00BFFF'][Math.floor(Math.random() * 5)],
+            type: 'confetti'
+        });
+    }
+}
+
+function drawLoseScreen() {
+    drawBackground();
+    drawPlayField();
+
+    // Overlay
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    ctx.fillRect(0, 0, 360, 640);
+
+    // Lose panel
+    ctx.fillStyle = 'rgba(200,50,50,0.9)';
+    roundRect(40, 180, 280, 250, 20, true, false);
+
+    ctx.strokeStyle = '#FF4444';
+    ctx.lineWidth = 3;
+    roundRect(40, 180, 280, 250, 20, false, true);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 28px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('😭 卡槽已满！', 180, 230);
+
+    ctx.font = '16px Arial';
+    ctx.fillText(`得分: ${score}`, 180, 270);
+
+    if (!usedItems.revive) {
+        drawButton(80, 300, 200, 45, '🔄 复活继续', '#FF9800', true);
+    }
+
+    drawButton(80, 355, 200, 40, '重新开始', '#4CAF50', true);
+    drawButton(80, 400, 200, 40, '返回菜单', '#666', true);
+}
+
+function drawPlayField() {
+    // Sort cards by layer for proper rendering
+    const sortedCards = [...cards].sort((a, b) => a.layer - b.layer);
+
+    for (let card of sortedCards) {
+        if (card.removed || card.animating) continue;
+
+        const clickable = isCardClickable(card);
+        const isHover = hoverCard && hoverCard.id === card.id && clickable;
+
+        drawCard(card, card.x, card.y, CARD_W, CARD_H, isHover);
+    }
+}
+
+function drawParticles() {
+    for (let p of particles) {
+        ctx.save();
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+
+        if (p.type === 'star') {
+            drawStar(p.x, p.y, p.size);
+        } else if (p.type === 'confetti') {
+            ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size * 0.6);
+        } else {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.restore();
+    }
+}
+
+function drawStar(x, y, size) {
+    ctx.beginPath();
+    for (let i = 0; i < 5; i++) {
+        const angle = (i * 4 * Math.PI / 5) - Math.PI / 2;
+        const px = x + Math.cos(angle) * size;
+        const py = y + Math.sin(angle) * size;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+}
+
+function drawMessage() {
+    if (messageTimer <= 0) return;
+
+    const alpha = Math.min(1, messageTimer / 30);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.7)';
+    const textW = ctx.measureText(messageText).width + 40;
+    roundRect(180 - textW / 2, 75, textW, 35, 10, true, false);
+
+    ctx.fillStyle = '#FFD700';
+    ctx.font = 'bold 16px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(messageText, 180, 92);
+
+    ctx.restore();
+}
+
+function roundRect(x, y, w, h, r, fill, stroke) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+    if (fill) ctx.fill();
+    if (stroke) ctx.stroke();
+}
+
+// Update functions
+function update() {
+    // Update animations
+    for (let i = animatingCards.length - 1; i >= 0; i--) {
+        const card = animatingCards[i];
+        card.animProgress += 0.08;
+
+        if (card.animProgress >= 1) {
+            card.animProgress = 1;
+            card.animating = false;
+            card.x = card.animTargetX;
+            card.y = card.animTargetY;
+            animatingCards.splice(i, 1);
+
+            // Check for matches after animation completes
+            if (animatingCards.length === 0) {
+                setTimeout(checkMatch, 100);
+            }
+        } else {
+            // Ease out cubic
+            const t = 1 - Math.pow(1 - card.animProgress, 3);
+            card.x = card.animStartX + (card.animTargetX - card.animStartX) * t;
+            card.y = card.animStartY + (card.animTargetY - card.animStartY) * t;
+        }
+    }
+
+    // Update particles
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += 0.05; // gravity
+        p.life -= p.decay;
+
+        if (p.life <= 0) {
+            particles.splice(i, 1);
+        }
+    }
+
+    // Update timers
+    if (messageTimer > 0) messageTimer--;
+    if (comboTimer > 0) comboTimer--;
+    if (shakeTimer > 0) shakeTimer--;
+
+    // Update slot card positions (smooth repositioning)
+    for (let i = 0; i < slotCards.length; i++) {
+        const card = slotCards[i];
+        if (!card.animating) {
+            const target = getSlotPosition(i);
+            card.x += (target.x - card.x) * 0.3;
+            card.y += (target.y - card.y) * 0.3;
+        }
+    }
+}
+
+function render() {
+    ctx.clearRect(0, 0, 360, 640);
+
+    if (gameState === 'menu') {
+        drawMenu();
+    } else if (gameState === 'playing') {
+        drawBackground();
+
+        // Shake effect
+        if (shakeTimer > 0) {
+            ctx.save();
+            ctx.translate(
+                Math.sin(shakeTimer * 1.5) * 3,
+                Math.cos(shakeTimer * 2) * 2
+            );
+        }
+
+        drawPlayField();
+        drawSlotArea();
+
+        if (shakeTimer > 0) ctx.restore();
+
+        drawItems();
+        drawHUD();
+        drawParticles();
+        drawMessage();
+
+        // Draw animating cards on top
+        for (let card of animatingCards) {
+            drawCard(card, card.x, card.y, CARD_W, CARD_H, true);
+        }
+    } else if (gameState === 'win') {
+        drawWinScreen();
+        drawParticles();
+    } else if (gameState === 'lose') {
+        drawLoseScreen();
+    }
+}
+
+function gameLoop() {
+    update();
+    render();
+    requestAnimationFrame(gameLoop);
+}
+
+// Input handling
+function getCardAt(mx, my) {
+    // Check from top layer down
+    const sortedCards = [...cards].sort((a, b) => b.layer - a.layer);
+    for (let card of sortedCards) {
+        if (card.removed) continue;
+        if (mx >= card.x && mx <= card.x + CARD_W &&
+            my >= card.y && my <= card.y + CARD_H) {
+            return card;
+        }
+    }
+    return null;
+}
+
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+
+    if (gameState === 'playing') {
+        hoverCard = getCardAt(mx, my);
+    }
+});
+
+canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const mx = (e.clientX - rect.left) * scaleX;
+    const my = (e.clientY - rect.top) * scaleY;
+
+    handleClick(mx, my);
+});
+
+canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    const touch = e.touches[0];
+    const mx = (touch.clientX - rect.left) * scaleX;
+    const my = (touch.clientY - rect.top) * scaleY;
+
+    handleClick(mx, my);
+}, { passive: false });
+
+function handleClick(mx, my) {
+    if (gameState === 'menu') {
+        // Level 1 button
+        if (mx >= 80 && mx <= 280 && my >= 230 && my <= 280) {
+            currentLevel = 1;
+            generateLevel(1);
+            gameState = 'playing';
+        }
+        // Level 2 button
+        if (mx >= 80 && mx <= 280 && my >= 300 && my <= 350) {
+            currentLevel = 2;
+            generateLevel(2);
+            gameState = 'playing';
+        }
+        return;
+    }
+
+    if (gameState === 'win') {
+        // Next level button (level 1 only)
+        if (currentLevel === 1 && mx >= 80 && mx <= 280 && my >= 340 && my <= 385) {
+            currentLevel = 2;
+            generateLevel(2);
+            gameState = 'playing';
+        }
+        // Menu button
+        if (mx >= 80 && mx <= 280 && my >= 395 && my <= 435) {
+            gameState = 'menu';
+        }
+        return;
+    }
+
+    if (gameState === 'lose') {
+        // Revive button
+        if (!usedItems.revive && mx >= 80 && mx <= 280 && my >= 300 && my <= 345) {
+            useRevive();
+        }
+        // Restart button
+        if (mx >= 80 && mx <= 280 && my >= 355 && my <= 395) {
+            generateLevel(currentLevel);
+            gameState = 'playing';
+        }
+        // Menu button
+        if (mx >= 80 && mx <= 280 && my >= 400 && my <= 440) {
+            gameState = 'menu';
+        }
+        return;
+    }
+
+    if (gameState === 'playing') {
+        // Check item buttons
+        const itemY = 600;
+        const itemW = 70;
+        const startX = (360 - 3 * itemW) / 2;
+
+        for (let i = 0; i < 3; i++) {
+            const x = startX + i * itemW + 5;
+            if (mx >= x && mx <= x + itemW - 10 && my >= itemY && my <= itemY + 32) {
+                if (i === 0) useRemove3();
+                else if (i === 1) useUndo();
+                else if (i === 2) useShuffle();
+                return;
+            }
+        }
+
+        // Check card clicks
+        if (animatingCards.length > 0) return; // Wait for animations
+
+        const card = getCardAt(mx, my);
+        if (card && isCardClickable(card)) {
+            createClickParticles(mx, my);
+
+            if (slotCards.length < MAX_SLOTS) {
+                addToSlot(card);
+            } else {
+                shakeTimer = 20;
+                showMessage('卡槽已满！');
+            }
+        } else if (card && !card.removed) {
+            shakeTimer = 10;
+        }
+    }
+}
+
+// Initialize and start
+gameLoop();
+</script>
+</body>
+</html>

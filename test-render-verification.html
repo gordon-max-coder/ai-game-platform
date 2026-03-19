@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>渲染测试 - 使用 api-responses 实际代码</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+        .info {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            border-left: 4px solid #2196F3;
+        }
+        .test-area {
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            background: #fafafa;
+        }
+        iframe {
+            width: 100%;
+            height: 700px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .status {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .code-preview {
+            margin-top: 20px;
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        button {
+            background: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>🎮 游戏渲染测试</h1>
+        <div class="info">
+            <strong>测试目的：</strong>验证 api-responses 目录下的实际游戏代码是否能正常渲染<br>
+            <strong>测试文件：</strong>game-2026-03-13T06-10-52-308Z.html<br>
+            <strong>代码长度：</strong><span id="codeLength">-</span> 字符<br>
+            <strong>iframe sandbox：</strong>allow-scripts allow-same-origin
+        </div>
+        
+        <div>
+            <button onclick="loadTest1()">测试 1: 直接加载 HTML 文件</button>
+            <button onclick="loadTest2()">测试 2: 通过 blob 加载</button>
+            <button onclick="loadTest3()">测试 3: srcdoc 方式 (create.html 使用)</button>
+            <button onclick="showCode()">显示代码预览</button>
+        </div>
+        
+        <div class="test-area" style="margin-top: 20px;">
+            <h3>渲染区域：</h3>
+            <div id="iframeContainer"></div>
+            <div id="status" class="status" style="display: none;"></div>
+        </div>
+        
+        <div id="codePreview" class="code-preview" style="display: none;"></div>
+    </div>
+
+    <script>
+        let gameCode = null;
+        
+        // 预加载游戏代码
+        fetch('api-responses/game-2026-03-13T06-10-52-308Z.html')
+            .then(response => response.text())
+            .then(html => {
+                gameCode = html;
+                document.getElementById('codeLength').textContent = html.length;
+                console.log('✅ 游戏代码加载成功，长度:', html.length);
+                console.log('代码开头:', html.substring(0, 100));
+            })
+            .catch(error => {
+                console.error('❌ 加载失败:', error);
+                showStatus('加载游戏代码失败：' + error.message, 'error');
+            });
+        
+        function loadTest1() {
+            // 测试 1: 直接通过 iframe src 加载 HTML 文件
+            const container = document.getElementById('iframeContainer');
+            container.innerHTML = `
+                <iframe 
+                    src="api-responses/game-2026-03-13T06-10-52-308Z.html"
+                    sandbox="allow-scripts allow-same-origin"
+                ></iframe>
+            `;
+            showStatus('测试 1: 直接加载 HTML 文件 - iframe 已创建', 'success');
+            
+            const iframe = container.querySelector('iframe');
+            iframe.onload = function() {
+                console.log('✅ iframe 加载完成 (测试 1)');
+                showStatus('✅ 测试 1 成功：iframe 正常加载', 'success');
+            };
+            iframe.onerror = function() {
+                console.error('❌ iframe 加载失败 (测试 1)');
+                showStatus('❌ 测试 1 失败：iframe 加载错误', 'error');
+            };
+        }
+        
+        function loadTest2() {
+            // 测试 2: 通过 blob URL 加载（模拟 create.html 的方式）
+            if (!gameCode) {
+                showStatus('游戏代码尚未加载完成，请稍后再试', 'error');
+                return;
+            }
+            
+            const container = document.getElementById('iframeContainer');
+            const blob = new Blob([gameCode], { type: 'text/html' });
+            const blobUrl = URL.createObjectURL(blob);
+            
+            container.innerHTML = `
+                <iframe 
+                    src="${blobUrl}"
+                    sandbox="allow-scripts allow-same-origin"
+                ></iframe>
+            `;
+            showStatus('测试 2: 通过 blob 加载 - iframe 已创建', 'success');
+            
+            const iframe = container.querySelector('iframe');
+            iframe.onload = function() {
+                console.log('✅ iframe 加载完成 (测试 2)');
+                showStatus('✅ 测试 2 成功：blob 方式正常加载', 'success');
+            };
+            iframe.onerror = function() {
+                console.error('❌ iframe 加载失败 (测试 2)');
+                showStatus('❌ 测试 2 失败：blob 方式加载错误', 'error');
+            };
+        }
+        
+        function loadTest3() {
+            // 测试 3: 通过 srcdoc 加载（create.html 实际使用的方式）
+            if (!gameCode) {
+                showStatus('游戏代码尚未加载完成，请稍后再试', 'error');
+                return;
+            }
+            
+            const container = document.getElementById('iframeContainer');
+            
+            container.innerHTML = `
+                <iframe 
+                    sandbox="allow-scripts allow-same-origin"
+                ></iframe>
+            `;
+            
+            const iframe = container.querySelector('iframe');
+            
+            // 先设置 iframe，再设置 srcdoc（模拟 create.html 的逻辑）
+            let validCode = gameCode;
+            if (!validCode.toLowerCase().includes('<!doctype')) {
+                validCode = '<!DOCTYPE html>\n' + validCode;
+            }
+            
+            console.log('📝 设置 iframe srcdoc，代码长度:', validCode.length);
+            iframe.srcdoc = validCode;
+            
+            iframe.onload = function() {
+                console.log('✅ iframe 加载完成 (测试 3 - srcdoc)');
+                showStatus('✅ 测试 3 成功：srcdoc 方式正常加载（create.html 使用的方式）', 'success');
+            };
+            
+            iframe.onerror = function() {
+                console.error('❌ iframe 加载失败 (测试 3 - srcdoc)');
+                showStatus('❌ 测试 3 失败：srcdoc 方式加载错误', 'error');
+            };
+            
+            showStatus('测试 3: srcdoc 方式 - iframe 已创建', 'success');
+        }
+        
+        function showCode() {
+            const preview = document.getElementById('codePreview');
+            if (!gameCode) {
+                preview.innerHTML = '游戏代码尚未加载完成...';
+            } else {
+                preview.innerHTML = escapeHtml(gameCode.substring(0, 2000)) + (gameCode.length > 2000 ? '\n... (代码过长，仅显示前 2000 字符)' : '');
+            }
+            preview.style.display = preview.style.display === 'none' ? 'block' : 'none';
+        }
+        
+        function showStatus(message, type) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status ' + type;
+            status.style.display = 'block';
+            console.log(message);
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

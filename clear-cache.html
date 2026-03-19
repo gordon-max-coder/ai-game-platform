@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>清理缓存和存储</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 40px;
+            background: #1a1a1a;
+            color: #fff;
+            font-family: Arial, sans-serif;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #ff5a5f;
+            margin-bottom: 30px;
+        }
+        .card {
+            background: #2a2a2a;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .card h2 {
+            margin-top: 0;
+            color: #7CFF7A;
+            font-size: 18px;
+        }
+        button {
+            background: #42a5ff;
+            color: #fff;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #5ab5ff;
+        }
+        button.danger {
+            background: #ff5a5f;
+        }
+        button.danger:hover {
+            background: #ff6b70;
+        }
+        .status {
+            margin-top: 15px;
+            padding: 10px;
+            background: #111;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 13px;
+        }
+        .success { color: #7CFF7A; }
+        .error { color: #ff5a5f; }
+        .info { color: #42a5ff; }
+        .check-item {
+            padding: 8px;
+            margin: 5px 0;
+            border-left: 3px solid #42a5ff;
+            background: #1a1a1a;
+        }
+        .check-item.ok { border-left-color: #7CFF7A; }
+        .check-item.fail { border-left-color: #ff5a5f; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧹 清理缓存和存储</h1>
+        
+        <div class="card">
+            <h2>📊 当前状态检查</h2>
+            <div id="statusCheck"></div>
+        </div>
+        
+        <div class="card">
+            <h2>🗑️ 清理操作</h2>
+            <button onclick="clearSessionStorage()">清理 sessionStorage</button>
+            <button onclick="clearLocalStorage()">清理 localStorage</button>
+            <button class="danger" onclick="clearAll()">⚠️ 清理所有数据</button>
+            <div id="clearStatus" class="status" style="display: none;"></div>
+        </div>
+        
+        <div class="card">
+            <h2>🔄 测试步骤</h2>
+            <ol>
+                <li>点击"清理所有数据"</li>
+                <li>关闭这个标签页</li>
+                <li>重新打开 <a href="create.html" target="_blank">create.html</a></li>
+                <li>验证：应该只显示左侧对话区（单栏布局）</li>
+            </ol>
+        </div>
+    </div>
+
+    <script>
+        function checkStatus() {
+            const statusDiv = document.getElementById('statusCheck');
+            const sessionStorageSize = JSON.stringify(sessionStorage).length;
+            const localStorageSize = JSON.stringify(localStorage).length;
+            
+            // 检查 sessionStorage
+            const hasSessionData = sessionStorageSize > 2;
+            const currentGameId = sessionStorage.getItem('currentGameId');
+            
+            // 检查 localStorage
+            const hasLocalData = localStorageSize > 2;
+            const aiGames = localStorage.getItem('aiGames');
+            const gamesCount = aiGames ? JSON.parse(aiGames).length : 0;
+            
+            statusDiv.innerHTML = `
+                <div class="check-item ${hasSessionData ? 'fail' : 'ok'}">
+                    <strong>sessionStorage:</strong> ${hasSessionData ? '❌ 有数据' : '✅ 空'}
+                    ${currentGameId ? `<br>  - currentGameId: ${currentGameId}` : ''}
+                </div>
+                <div class="check-item ${hasLocalData ? 'fail' : 'ok'}">
+                    <strong>localStorage:</strong> ${hasLocalData ? '❌ 有数据' : '✅ 空'}
+                    ${gamesCount > 0 ? `<br>  - 游戏数量：${gamesCount}` : ''}
+                </div>
+                <div class="check-item info">
+                    <strong>sessionStorage 大小:</strong> ${sessionStorageSize} 字节
+                </div>
+                <div class="check-item info">
+                    <strong>localStorage 大小:</strong> ${localStorageSize} 字节
+                </div>
+            `;
+        }
+        
+        function clearSessionStorage() {
+            sessionStorage.clear();
+            showStatus('✅ sessionStorage 已清理', 'success');
+            checkStatus();
+        }
+        
+        function clearLocalStorage() {
+            if (confirm('⚠️ 确定要清理 localStorage 吗？这将删除所有游戏数据！')) {
+                localStorage.clear();
+                showStatus('✅ localStorage 已清理', 'success');
+                checkStatus();
+            }
+        }
+        
+        function clearAll() {
+            if (confirm('⚠️ 确定要清理所有数据吗？\n\n这将删除：\n- sessionStorage（页面刷新数据）\n- localStorage（所有游戏数据）\n\n此操作不可恢复！')) {
+                sessionStorage.clear();
+                localStorage.clear();
+                showStatus('✅ 所有数据已清理', 'success');
+                checkStatus();
+            }
+        }
+        
+        function showStatus(message, type) {
+            const statusDiv = document.getElementById('clearStatus');
+            statusDiv.style.display = 'block';
+            statusDiv.className = `status ${type}`;
+            statusDiv.textContent = message;
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
+        
+        // 页面加载时检查
+        checkStatus();
+    </script>
+</body>
+</html>

@@ -1,25 +1,36 @@
-# 环境变量 - 包含敏感信息
-.env
-
-# 依赖包
+# Dependencies
 node_modules/
 
-# 日志文件
-*.log
-npm-debug.log*
+# API responses (too large)
+api-responses/
 
-# 操作系统文件
+# Game history
+game-history/
+
+# Temp files
+temp/
+*.log
+*.zip
+
+# OS files
 .DS_Store
 Thumbs.db
 
-# 截图和临时文件
+# IDE
+.vscode/
+.idea/
+
+# Environment (contains secrets)
+.env
+.env.example
+
+# OpenClaw (not needed for the game platform)
+.openclaw/
+active_skills/
+
+# Large test files
 *.png
 *.jpg
-*.jpeg
-!images/*.png
-!images/*.jpg
-!images/*.svg
 
-# 备份文件
-*.bak
-*.backup
+# Godot export files
+godot-skill/
