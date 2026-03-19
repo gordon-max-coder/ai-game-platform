@@ -1,7 +1,7 @@
 ﻿// 创建游戏页面专用脚本
 
 // API 配置
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = '/api';
 
 // 灵感提示库
 const inspirationPrompts = [
