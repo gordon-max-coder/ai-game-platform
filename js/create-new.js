@@ -3,7 +3,7 @@
  * 所有操作都基于 currentGameId
  */
 
-const API_URL = 'http://localhost:3000/api/generate';
+const API_URL = '/api/generate';
 
 // 核心状态 - 所有操作都基于 currentGameId
 let currentGameId = null;      // 当前游戏 ID（创建时生成，编辑时加载）
